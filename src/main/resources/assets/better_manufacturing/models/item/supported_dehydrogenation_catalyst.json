@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "better_manufacturing:item/supported_dehydrogenation_catalyst"
+  }
+}
