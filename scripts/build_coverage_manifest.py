@@ -15,7 +15,7 @@ GROUPS = []
 def group(namespace, family, ids, role, parts, effects, milestone=4, disposition='material_dependent'):
     GROUPS.append((namespace, family, ids.split(), role, parts.split(), effects.split(), milestone, disposition))
 
-group('create', 'cutting', 'mechanical_drill', 'head', 'pick_head', 'cutting_rate hardness_limit', 2)
+group('create', 'cutting', 'mechanical_drill', 'head', 'pick_head', 'cutting_rate native_harvest_tier stress_load', 2)
 group('create', 'sawing', 'mechanical_saw', 'blade', 'broad_blade small_blade', 'cutting_rate hardness_limit')
 group('create', 'bulk_work', 'millstone crushing_wheel mechanical_roller mechanical_press', 'working_surface', 'hammer_head large_plate', 'work_rate load')
 group('create', 'field_work', 'mechanical_harvester mechanical_plough', 'working_surface', 'small_blade small_axe_head', 'work_rate')
@@ -151,7 +151,7 @@ def generate(pack, cache):
         'new_component_ceiling':12, 'planned_component_ids':['better_manufacturing:' + p for p in
         ['pla_stock','pp_stock','lactide','propylene','tin_carboxylate_catalyst','supported_dehydrogenation_catalyst','coordination_polymerisation_catalyst']],
         'sources':sources, 'entries':sorted(entries, key=lambda e:e['id']),
-        'selection_findings':[{'kind':'missing_asset_evidence', 'ids':[e['id'] for e in sorted(entries, key=lambda e:e['id']) if not e['asset_evidence']],
+        'selection_findings':[{'kind':'missing_asset_evidence', 'ids':sorted(DEFERRED_IDS),
             'status':'user_deferred', 'note':'User explicitly deferred these five unconfirmed IDs and requested completion of the remaining roster. They are not implemented, verified, or replaced with other machines.'}],
         'excluded_families':['creative_and_internal_helpers','quarantined_content','tconstruct_bootstrap','primitive_survival',
         'cooking','decorative_construction','ordinary_storage_capacity','magic_progression','ecology_and_genetics',

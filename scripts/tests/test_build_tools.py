@@ -4,6 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 import sys
+import hashlib
+from zipfile import ZipFile
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 def load(name):
@@ -13,6 +15,7 @@ def load(name):
 identity = load('source_identity')
 coverage = load('coverage')
 native = load('native_receipt')
+create_identity = load('create_fixture_identity')
 
 class SourceIdentityTests(unittest.TestCase):
     def test_dirty_production_changes_but_tests_and_build_do_not(self):
@@ -57,6 +60,25 @@ class NativeReceiptTests(unittest.TestCase):
                 (root / 'logs/latest.log').write_text(text)
                 with self.assertRaises(ValueError): native.receipt(root, root, 9)
 
+class CreateFixtureIdentityTests(unittest.TestCase):
+    def test_source_and_hook_bytes_are_bound_to_public_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); public = root / 'create.jar'; slim = root / 'slim.jar'; pin = root / 'create.pw.toml'
+            def archive(path, altered=False):
+                with ZipFile(path, 'w') as jar:
+                    jar.writestr('META-INF/MANIFEST.MF', 'Git-Hash: fixture-revision\n')
+                    for index, name in enumerate(create_identity.CLASSES):
+                        jar.writestr('com/simibubi/create/' + name + '.class', b'changed' if altered and index == 0 else b'same')
+            archive(public); archive(slim)
+            pin.write_text('filename="create.jar"\n[download]\nhash-format="sha1"\nhash="' + hashlib.sha1(public.read_bytes()).hexdigest() + '"\n')
+            result = create_identity.verify(pin, slim, root)
+            self.assertEqual(13, len(result['matching_classes']))
+            self.assertFalse(result['pack_runtime_accepted'])
+            archive(slim, altered=True)
+            with self.assertRaises(ValueError): create_identity.verify(pin, slim, root)
+            public.write_bytes(b'not the pinned artifact')
+            with self.assertRaises(ValueError): create_identity.verify(pin, slim, root)
+
 class CoverageTests(unittest.TestCase):
     def fixture(self):
         return {'schema':'better_manufacturing.coverage.v1', 'completion_requires_full_roster':True,
@@ -74,6 +96,13 @@ class CoverageTests(unittest.TestCase):
         data = self.fixture(); entry = data['entries'][0]
         entry.update(status='verified', acquisition_audit='verified', native_reference_audit='verified')
         self.assertTrue(coverage.validate(data, complete=True))
+    def test_deferral_does_not_accept_or_hide_remaining_work(self):
+        data = self.fixture(); data['selection_findings'] = [{'status':'user_deferred'}]
+        errors = coverage.validate(data, complete=True)
+        self.assertIn('incomplete: test:drill', errors)
+        self.assertNotIn('selection discrepancies remain unresolved', errors)
+        data['entries'][0].update(disposition='excluded', exclusion_reason='user_deferred_unconfirmed_identity')
+        self.assertTrue(any('outside authorized deferral' in error for error in coverage.validate(data)))
     def test_duplicates_and_budget_rejected(self):
         data = self.fixture(); data['entries'].append(copy.deepcopy(data['entries'][0]))
         self.assertTrue(coverage.validate(data))
