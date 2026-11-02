@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.recipe;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -33,18 +33,10 @@ public final class PrettyPipesSettings {
             throw new IllegalArgumentException("Wrong working handle");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unusable handle material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
+        // Mining speed is the handle's native work-rate stat. Module tiers and paid
+        // pressurizer energy remain native; only this saved bounded ratio varies.
+        double rate = NativePartRates.relative(part, stack, NativePartRates.Measure.HANDLE_MINING_SPEED);
         String materialId = material.toString();
-        var policy = catalog.policies().get(materialId);
-        if (policy == null) policy = catalog.policies().get(material.getId().toString());
-        var iron = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || iron == null || !policy.supportedParts().contains(partId))
-            throw new IllegalArgumentException("Missing family handle rating");
-        double value = policy.traits().getOrDefault(trait, 0.0);
-        double reference = iron.traits().getOrDefault(trait, 0.0);
-        if (!Double.isFinite(value) || value <= 0 || !Double.isFinite(reference) || reference <= 0)
-            throw new IllegalArgumentException("Invalid family handle rating");
-        double rate = Math.max(.75, Math.min(1.5, value / reference));
         Map<String, Double> properties;
         switch (trait) {
             case "extraction_rate" -> {

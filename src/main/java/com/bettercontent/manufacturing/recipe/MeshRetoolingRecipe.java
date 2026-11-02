@@ -45,7 +45,7 @@ public final class MeshRetoolingRecipe extends CustomRecipe {
             }
             var result = mesh.copy(); result.setCount(1);
             BuildNbt.write(result.getOrCreateTag(), new MachineBuild(MachineBuild.VERSION, id.toString(), MeshEngineering.FUNCTION, parts, parsed.build().qualifications()));
-            if (!MeshEngineering.evaluate(result, com.bettercontent.manufacturing.data.EngineeringCatalog.clientThread()).allowed()) return null;
+            if (!MeshEngineering.evaluate(result, false).allowed()) return null;
             return new Result(result, refunds);
         } catch (IllegalArgumentException unsupported) { return null; }
     }

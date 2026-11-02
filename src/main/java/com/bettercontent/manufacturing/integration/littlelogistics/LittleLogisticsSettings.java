@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.littlelogistics;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -26,17 +26,10 @@ public final class LittleLogisticsSettings {
             || !(stack.getItem() instanceof ToolPartItem part)) throw new IllegalArgumentException("Wrong handle shape");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Invalid handle material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        String materialId = material.toString();
-        var policy = catalog.policies().getOrDefault(materialId, catalog.policies().get(material.getId().toString()));
-        var reference = catalog.policies().get("tconstruct:iron");
-        String trait = drive ? "drive_rate" : "transfer_rate";
-        if (!catalog.ready() || policy == null || reference == null || !policy.supportedParts().contains(partId))
-            throw new IllegalArgumentException("No compatible handle rating");
-        double value = policy.traits().getOrDefault(trait, 0.0), baseline = reference.traits().getOrDefault(trait, 0.0);
-        if (!Double.isFinite(value) || value <= 0 || !Double.isFinite(baseline) || baseline <= 0)
-            throw new IllegalArgumentException("Invalid handle rating");
-        double rate = Math.max(.75, Math.min(1.5, value / baseline));
-        return new MachineSettings(output, Map.of(drive ? "drive_rate" : "transfer_rate", rate), Map.of(role, materialId), null);
+        // Both propulsion shafts and rapid-hopper actuators have native moving
+        // handle parts; bake their relative Tinkers mining-speed modifier once.
+        double rate = NativePartRates.relative(part, stack, NativePartRates.Measure.HANDLE_MINING_SPEED);
+        return new MachineSettings(output, Map.of(drive ? "drive_rate" : "transfer_rate", rate),
+            Map.of(role, material.toString()), null);
     }
 }

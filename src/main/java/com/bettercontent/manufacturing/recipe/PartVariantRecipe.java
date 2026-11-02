@@ -67,7 +67,30 @@ public final class PartVariantRecipe extends ShapedRecipe {
                         }
                     }
                 }
+                // Upgrading an installed PrettyPipes module must not erase its native
+                // filters, routing, inventory or other configuration. The single medium
+                // predecessor is physical input; the new handle supplies the new rating.
+                String mediumModule = switch (id.toString()) {
+                    case "prettypipes:high_extraction_module" -> "prettypipes:medium_extraction_module";
+                    case "prettypipes:high_speed_module" -> "prettypipes:medium_speed_module";
+                    default -> null;
+                };
+                if (mediumModule != null) {
+                    ItemStack predecessor = ItemStack.EMPTY;
+                    for (int slot = 0; slot < grid.getContainerSize(); slot++) {
+                        ItemStack candidate = grid.getItem(slot);
+                        var candidateId = ForgeRegistries.ITEMS.getKey(candidate.getItem());
+                        if (candidateId != null && mediumModule.equals(candidateId.toString())) {
+                            if (!predecessor.isEmpty()) return ItemStack.EMPTY;
+                            predecessor = candidate;
+                        }
+                    }
+                    if (predecessor.isEmpty()) return ItemStack.EMPTY;
+                    if (predecessor.hasTag()) output.setTag(predecessor.getTag().copy());
+                }
                 try {
+                    // Overwrite only the predecessor's Manufacturing setting with the
+                    // newly baked final value; all unrelated native NBT stays intact.
                     SettingsNbt.write(output.getOrCreateTag(), PartSettings.bake(id.toString(), function, inputs));
                     return output;
                 } catch (IllegalArgumentException unsupported) { return ItemStack.EMPTY; }

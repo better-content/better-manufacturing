@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.powergrid;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -13,22 +13,22 @@ import java.util.*;
 public final class PowergridPartSettings {
     private PowergridPartSettings() {}
     public static MachineSettings bake(String output, String function, Map<String, ItemStack> inputs) {
-        String trait, property;
+        String property;
         Map<String, String> roles;
         switch (function) {
             case "better_manufacturing:powergrid/heating" -> {
                 if (!Set.of("powergrid:basin_heater", "powergrid:heating_coil").contains(output)) throw new IllegalArgumentException("Wrong heater");
-                trait = "powergrid_thermal"; property = "thermal_mass_ratio";
+                property = "thermal_mass_ratio";
                 roles = Map.of("thermal_support", "tconstruct:large_plate");
             }
             case "better_manufacturing:powergrid/motors" -> {
                 if (!Set.of("powergrid:electric_motor", "powergrid:constant_speed_motor", "powergrid:servo", "powergrid:electric_fan").contains(output)) throw new IllegalArgumentException("Wrong motor");
-                trait = "powergrid_rotor"; property = "drive_ratio";
+                property = "drive_ratio";
                 roles = Map.of("rotor", "tconstruct:tough_handle");
             }
             case "better_manufacturing:powergrid/generation" -> {
                 if (!Set.of("powergrid:copper_coil", "powergrid:resistive_coil", "powergrid:generator_clutch", "powergrid:generator_commutator", "powergrid:generator_induction_rotor", "powergrid:generator_vertical_commutator").contains(output)) throw new IllegalArgumentException("Wrong generator part");
-                trait = "powergrid_generator"; property = "generator_ratio";
+                property = "generator_ratio";
                 roles = Map.of("shaft", "tconstruct:tough_handle", "surface", "tconstruct:large_plate");
             }
             default -> throw new IllegalArgumentException("Wrong function");
@@ -39,12 +39,8 @@ public final class PowergridPartSettings {
         var expected = new HashSet<>(roles.keySet());
         for (int i = 0; i < coilCount; i++) expected.add("coil_" + i);
         if (!inputs.keySet().equals(expected)) throw new IllegalArgumentException("Wrong part bindings");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        if (!catalog.ready()) throw new IllegalArgumentException("Missing ratings");
-        var reference = catalog.policies().get("tconstruct:iron");
-        if (reference == null || reference.traits().getOrDefault(trait, 0d) <= 0) throw new IllegalArgumentException("Missing reference");
         var labels = new HashMap<String, String>();
-        double ratio = 0;
+        double rotorRate = 1, shaftRate = 1, surfaceRate = 1, thermalRate = 1;
         for (var role : roles.entrySet()) {
             var stack = inputs.get(role.getKey());
             if (stack == null || stack.isEmpty() || !(stack.getItem() instanceof ToolPartItem part)) throw new IllegalArgumentException("Missing native part");
@@ -53,15 +49,19 @@ public final class PowergridPartSettings {
             var material = part.getMaterial(stack);
             if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported material");
             var label = material.toString();
-            var policy = catalog.policies().getOrDefault(label, catalog.policies().get(material.getId().toString()));
-            if (policy == null || !policy.supportedParts().contains(role.getValue())) throw new IllegalArgumentException("Unrated part");
-            double value = policy.traits().getOrDefault(trait, 0d) / reference.traits().get(trait);
-            if (!Double.isFinite(value) || value <= 0) throw new IllegalArgumentException("Unrated function");
-            ratio += value / roles.size();
+            // Approximate heat response from the native head's structural
+            // durability; this changes thermal mass, never creates heat.
+            NativePartRates.Measure measure = role.getKey().equals("surface") || role.getKey().equals("thermal_support")
+                ? NativePartRates.Measure.HEAD_DURABILITY : NativePartRates.Measure.HANDLE_MINING_SPEED;
+            double nativeRate = NativePartRates.relative(part, stack, measure);
+            if (role.getKey().equals("thermal_support")) thermalRate = nativeRate;
+            else if (role.getKey().equals("shaft")) shaftRate = nativeRate;
+            else if (role.getKey().equals("surface")) surfaceRate = nativeRate;
+            else rotorRate = nativeRate;
             labels.put(role.getKey(), label);
         }
         var values = new HashMap<String, Double>();
-        values.put(property, Math.max(.75, Math.min(1.5, ratio)));
+        values.put(property, heater ? thermalRate : roles.size() == 2 ? generatorRate(shaftRate, surfaceRate) : rotorRate);
         if (heater) {
             double coilRatio = 1.5;
             for (int i = 0; i < coilCount; i++) {
@@ -76,5 +76,11 @@ public final class PowergridPartSettings {
             values.put("heater_coil_ratio", coilRatio);
         }
         return new MachineSettings(output, values, labels, null);
+    }
+
+    /** Two native working parts in the generator's existing shaft/surface geometry. */
+    public static double generatorRate(double shaft, double surface) {
+        if (!Double.isFinite(shaft) || !Double.isFinite(surface)) throw new IllegalArgumentException("Nonfinite generator rate");
+        return Math.max(.75, Math.min(1.5, (shaft + surface) / 2));
     }
 }

@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.eureka;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -14,7 +14,6 @@ public final class EurekaEngineSettings {
     public static final String FUNCTION = "better_manufacturing:eureka/engine";
     public static final String ROLE = "working_assembly";
     private static final String PART = "tconstruct:tough_handle";
-    private static final String TRAIT = "eureka_drive_rate";
 
     private EurekaEngineSettings() {}
 
@@ -27,19 +26,10 @@ public final class EurekaEngineSettings {
             throw new IllegalArgumentException("Expected a Tinkers tough handle");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported handle material");
-        String materialId = material.toString();
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        var policy = catalog.policies().getOrDefault(materialId, catalog.policies().get(material.getId().toString()));
-        var iron = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || iron == null || !policy.supportedParts().contains(PART))
-            throw new IllegalArgumentException("No native drive assembly rating");
-        double rating = policy.traits().getOrDefault(TRAIT, 0d);
-        double reference = iron.traits().getOrDefault(TRAIT, 0d);
-        if (!Double.isFinite(rating) || rating <= 0 || !Double.isFinite(reference) || reference <= 0)
-            throw new IllegalArgumentException("No drive assembly rating");
-        double rate = Math.max(.75, Math.min(1.5, rating / reference));
+        double rate = NativePartRates.relative(part, stack, NativePartRates.Measure.HANDLE_MINING_SPEED);
         // Same factor on ship force and native consumed heat: higher thrust pays proportionate work.
-        return new MachineSettings(output, Map.of("drive_performance", rate, "consumption", rate), Map.of(ROLE, materialId), null);
+        return new MachineSettings(output, Map.of("drive_performance", rate, "consumption", rate),
+            Map.of(ROLE, material.toString()), null);
     }
 
     /** A malformed or unrelated record never changes Eureka's baseline behavior. */

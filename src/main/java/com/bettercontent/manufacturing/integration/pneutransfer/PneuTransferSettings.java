@@ -1,7 +1,8 @@
 package com.bettercontent.manufacturing.integration.pneutransfer;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -10,7 +11,7 @@ import slimeknights.tconstruct.library.tools.part.ToolPartItem;
 import java.util.Map;
 import java.util.Set;
 
-/** Bakes the fitting's authored throughput rating; storage capacities and fluid acceptance remain native. */
+/** Bounded native head-speed proxy changes fitting throughput; storage and fluid acceptance remain native. */
 public final class PneuTransferSettings {
     public static final String FUNCTION = "better_manufacturing:pneumaticcraft/fluid_transfer";
     private static final Set<String> OUTPUTS = Set.of("pneumaticcraft:gas_lift", "pneumaticcraft:small_tank",
@@ -30,18 +31,9 @@ public final class PneuTransferSettings {
             throw new IllegalArgumentException("Expected large plate fitting");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Invalid plate material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        var policy = catalog.policies().get(material.toString());
-        if (policy == null) policy = catalog.policies().get(material.getId().toString());
-        var reference = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || reference == null
-                || !policy.supportedParts().contains("tconstruct:large_plate"))
-            throw new IllegalArgumentException("Unsupported fitting material");
-        double rating = policy.traits().getOrDefault("fluid_transfer_rate", 0.0);
-        double base = reference.traits().getOrDefault("fluid_transfer_rate", 0.0);
-        if (!Double.isFinite(rating) || !Double.isFinite(base) || rating <= 0 || base <= 0)
-            throw new IllegalArgumentException("No fitting rating");
-        double rate = Math.max(.75, Math.min(1.5, rating / base));
+        // Approximate flow response from the consumed plate's native working
+        // speed, not a material-specific hydraulic table or fluid whitelist.
+        double rate = NativePartRates.relative(part, stack, Measure.HEAD_MINING_SPEED);
         return new MachineSettings(output, Map.of("transfer_rate", rate),
                 Map.of("wetted_fitting", material.toString()), null);
     }

@@ -13,17 +13,22 @@ wear, refunds, material accounting or qualification history are retained by thes
 |---|---|
 | Create Mechanical Drill | Pick head; baked native mining-speed ratio and harvest tier; matching stress; stationary and moving cutting hooks. |
 | Create Mechanical Saw | Small blade; baked native mining-speed ratio/tier; native processing and stationary/moving cutting hooks; matching stress. |
-| Create Mechanical Press | Large plate; authored pressing rating controls native press progress and stress. |
-| Create Millstone | Large plate; authored milling rating controls native processing progress and stress. |
+| Create Mechanical Press | Large plate; native Tinkers head mining speed now determines bounded press progress and stress. |
+| Create Millstone | Large plate; native head mining speed now determines bounded processing progress and stress. |
 | Create Whisk / Mechanical Mixer | Handle defines whisk settings; mixer consumes those baked settings and applies them to mixing progress and stress. |
 | Create Propeller / Encased Fan | Four small blades define airflow; fan consumes the propeller settings. Native airflow RPM/distance calculation and force use the rating, with matching stress. Native range caps, obstructions and processing recipes remain native. |
-| Create Mechanical Pump | A handle defines the impeller rating. The native pipe graph receives bounded scaled pump pressure; placement, save, drop, and matching kinetic stress use the baked settings. Existing pipe endpoints, reversal, and fluid recipes remain Create-owned. |
+| Create Mechanical Pump | A handle's native Tinkers durability modifier now defines bounded impeller pressure; placement, save, drop and matching kinetic stress use the baked final settings. Existing pipe endpoints, reversal and fluid recipes remain Create-owned. |
 | Create Sifter / Brass Sifter meshes | String, andesite, zinc and brass meshes consume four handles. Baked screen rate changes native progress and stress; native wet/dry recipes, rolls, overflow and brass filtering are unchanged. |
 
-Untiered multipliers remain within 0.75–1.5× reference. Cutters use native Tinkers head stats;
-other roles have separate explicit ratings, not a universal quality score. Cheap builds include
-native rock plates/blades and wooden handles. Native texture variants inherit their base rating
-unless specifically overridden. Iron is the reference at **crafting**, never a live runtime dependency.
+Untiered multipliers remain within 0.75–1.5× reference. Core cutters, working plates and blades
+use the native Tinkers head mining-speed stat; working handles use native handle modifiers (mining
+speed for screen/mixer throughput, durability for the impeller). Cheap builds include native rock
+plates/blades and wooden handles. Native texture variants retain their material's native base stats.
+Iron is the same-stat reference at **crafting**, never a live runtime dependency. This direct
+stat path supersedes legacy per-material machine-trait ratings. All production bake readers now
+use native part stats; the pack owner is retiring transitional engineering-policy JSONs. Dormant
+historical API types are not active data authority. No newly baked native-stat outcomes have been
+loader-validated.
 
 The pack's `20_powered_works.js` overrides upstream press, millstone, mixer and pump recipes; those actual
 progression roots now use the same serializer while retaining Machine Blocks and other gates. The mixer
@@ -68,12 +73,27 @@ pass focused tests. Construction-only outputs consume parts without fake perform
 unavailable outputs retain their unavailability and the five Backpacks/Clockwork exclusions remain
 excluded. The original 462 selected IDs are not a count of completed conversions.
 
-Nine physical components are centrally registered (12 maximum): eight polymer feed/stock/catalyst/
-culture items and one compressed-iron valve blank. The blank is a consumed prepared body for the
-native one-slot PNCR assembly-drill route, not a retained qualification token. Its recipe/hook are
-still subject to loaded PNCR tests. Polymer work has **20 authored process recipes** and scoped
-PLA/PP casting/material assets; the combined Manufacturing/Hazards propylene case, connected powered
-vacuum, first-feed bootstrap, casting/remelt and consumer replacement remain unaccepted. The generic
+Twelve physical components are centrally registered (12 maximum): eight polymer feed/stock/catalyst/
+culture items, a compressed-iron valve blank, and three consumed preparation bodies for the full-grid
+AE2 dense cell, two-input PowerGrid conductive casing and full-grid Mellarium temperature unit routes. The valve blank supports the native
+one-slot PNCR assembly-drill route; none of these bodies is a retained qualification token or a
+performance carrier. The dense cell route must preserve its eight cells and processor before adding
+one consumed plate; the casing route must retain the pack's copper-casing/red-wire gate and no-Mod
+fallback. The categorical Mellarium body must preserve its native four ingots, four bars and base
+before adding one consumed handle, without inventing temperature performance. All four routes remain
+loaded-mod unverified. The native slab-cutting route still yields two empty circuits after 50 ticks;
+no empty-circuit blank or fabricated material bonus was added. The physical item budget is full. Polymer work has **20 authored process recipes** and scoped
+PLA/PP casting/material assets. PLA and polypropylene are **ordinary Tinkers' materials** for
+existing parts and machines, not separate engineered-machine roles or process permissions: their
+native head and handle stats determine the newly baked rates for compatible parts, including
+distinct native PLA/PP handle mining-speed modifiers. The old 0.80×/0.85× screen policy rows are
+transitional data, **not** an extra material-to-machine rating layer or required final values.
+The old `compatible_processes` opt-in and per-material screen ratings are not consulted by the
+active bake path. Family outputs use bounded, explicitly approximate native-tool-stat formulas
+where machine responses have no literal TCon stat; these are not claims of measured hydraulic,
+thermal or chemical material properties. No separate eligibility/bonus catalogue is active. The combined
+Manufacturing/Hazards propylene case, connected powered vacuum, first-feed bootstrap,
+casting/remelt and consumer replacement remain unaccepted. The generic
 PNCR plastic routes must remain until both chains and replacements actually pass. Do not infer a
 measured 30–40 °C fermentation window from the native temperature-unspecified condition.
 

@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.railbeetle;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -29,12 +29,6 @@ public final class RailBeetlePartSettings {
             Map.entry("compound_torque_clutch_1", "torque_transfer"), Map.entry("compound_torque_clutch_2", "torque_transfer"),
             Map.entry("reinforced_drawgear_1", "towing_limit"), Map.entry("reinforced_drawgear_2", "towing_limit"),
             Map.entry("trestle_erector_1", "work_rate"), Map.entry("trestle_erector_2", "work_rate"));
-    private static final Map<String, String> RATINGS = Map.of(
-            "drive_performance", "rail_drive", "speed_limit", "rail_governor",
-            "recovery", "rail_recuperator", "deceleration", "rail_brakes",
-            "adhesion_delivery", "rail_adhesion", "torque_transfer", "rail_torque",
-            "towing_limit", "rail_drawgear", "work_rate", "rail_trestle");
-
     private RailBeetlePartSettings() {}
 
     public static MachineSettings bake(String output, String function, Map<String, ItemStack> inputs) {
@@ -42,14 +36,8 @@ public final class RailBeetlePartSettings {
         if (property == null || !function.equals(property.equals("drive_performance") ? DRIVES : MODULES)
                 || !inputs.keySet().equals(Set.of("drive_shaft", "working_surface")) || !MaterialRegistry.isFullyLoaded())
             throw new IllegalArgumentException("Unsupported Beetle assembly");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        if (!catalog.ready()) throw new IllegalArgumentException("Material ratings unavailable");
-        String rating = RATINGS.get(PROPERTIES.get(output.substring(PREFIX.length())));
-        var reference = catalog.policies().get("tconstruct:iron");
-        if (reference == null || reference.traits().getOrDefault(rating, 0d) <= 0)
-            throw new IllegalArgumentException("Missing Beetle reference rating");
         var materials = new LinkedHashMap<String, String>();
-        double result = 0;
+        double shaftRate = 1, surfaceRate = 1;
         for (String role : new String[]{"drive_shaft", "working_surface"}) {
             var stack = inputs.get(role);
             if (stack == null || !(stack.getItem() instanceof ToolPartItem part)) throw new IllegalArgumentException("Missing Tinkers working part");
@@ -59,15 +47,24 @@ public final class RailBeetlePartSettings {
             var material = part.getMaterial(stack);
             if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unusable Beetle part material");
             String materialId = material.toString();
-            var policy = catalog.policies().getOrDefault(materialId, catalog.policies().get(material.getId().toString()));
-            if (policy == null || !policy.supportedParts().contains(partId)) throw new IllegalArgumentException("No supported Beetle part rating");
-            double value = policy.traits().getOrDefault(rating, 0d);
-            if (!Double.isFinite(value) || value <= 0) throw new IllegalArgumentException("Missing role rating");
             materials.put(role, materialId);
-            result += (role.equals("drive_shaft") ? 0.45 : 0.55) * value / reference.traits().get(rating);
+            // Native head/handle working speed approximates active delivery
+            // and recuperation cadence; durability approximates braking and
+            // load-bearing structure, without a separate material policy.
+            boolean speed = property.equals("drive_performance") || property.equals("speed_limit")
+                || property.equals("work_rate") || property.equals("recovery") || property.equals("adhesion_delivery");
+            NativePartRates.Measure measure = role.equals("drive_shaft")
+                ? (speed ? NativePartRates.Measure.HANDLE_MINING_SPEED : NativePartRates.Measure.HANDLE_DURABILITY)
+                : (speed ? NativePartRates.Measure.HEAD_MINING_SPEED : NativePartRates.Measure.HEAD_DURABILITY);
+            double nativeRate = NativePartRates.relative(part, stack, measure);
+            if (role.equals("drive_shaft")) shaftRate = nativeRate; else surfaceRate = nativeRate;
         }
-        if (!Double.isFinite(result)) throw new IllegalArgumentException("Nonfinite Beetle rating");
-        return new MachineSettings(output, Map.of(PROPERTIES.get(output.substring(PREFIX.length())),
-                Math.max(.75, Math.min(1.5, result))), materials, null);
+        return new MachineSettings(output, Map.of(property, weightedRate(shaftRate, surfaceRate)), materials, null);
+    }
+
+    /** Native handle/plate ratio combined only for mechanical rail work. */
+    public static double weightedRate(double shaft, double surface) {
+        if (!Double.isFinite(shaft) || !Double.isFinite(surface)) throw new IllegalArgumentException("Nonfinite Beetle rating");
+        return Math.max(.75, Math.min(1.5, .45 * shaft + .55 * surface));
     }
 }

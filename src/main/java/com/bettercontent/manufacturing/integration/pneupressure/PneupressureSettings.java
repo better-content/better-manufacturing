@@ -1,7 +1,8 @@
 package com.bettercontent.manufacturing.integration.pneupressure;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -29,7 +30,9 @@ public final class PneupressureSettings {
             if (!VALVE_BLANK_ID.equals(output) || !inputs.keySet().equals(Set.of("body")))
                 throw new IllegalArgumentException("Unsupported valve blank parts");
             var labels = new LinkedHashMap<String, String>();
-            double body = rating(inputs.get("body"), "tconstruct:large_plate", "pressure_body", labels, "body");
+            // Approximate structural response from the consumed native plate;
+            // the actual pressure tier is never raised above native.
+            double body = rating(inputs.get("body"), "tconstruct:large_plate", Measure.HEAD_DURABILITY, labels, "body");
             return new MachineSettings(output, Map.of("pressure_envelope", Math.min(1, body)), labels, null);
         }
         if (!output.startsWith("pneumaticcraft:")) throw new IllegalArgumentException("Wrong output namespace");
@@ -43,22 +46,24 @@ public final class PneupressureSettings {
             : rotor ? Set.of("handle", "body") : Set.of("body")))
             throw new IllegalArgumentException("Wrong pressure part roles");
         var labels = new LinkedHashMap<String, String>();
+        // Approximate machine response from the consumed tool's native speed
+        // or structural wear: no invented per-material pressure/air table.
         double bodyRate = rating(inputs.get("body"), rotor ? "tconstruct:small_blade" : "tconstruct:large_plate",
-            rotor ? "airflow_rate" : compressor ? "compressed_air_rate" : "pressure_body", labels, "body");
-        double pressureBody = compressor ? rating(inputs.get("body"), "tconstruct:large_plate", "pressure_body", labels, "body") : bodyRate;
+            compressor || rotor ? Measure.HEAD_MINING_SPEED : Measure.HEAD_DURABILITY, labels, "body");
+        double pressureBody = compressor ? rating(inputs.get("body"), "tconstruct:large_plate",
+            Measure.HEAD_DURABILITY, labels, "body") : bodyRate;
         double handleRate = (compressor || rotor) ? rating(inputs.get("handle"), "tconstruct:tough_handle",
-            "compressor_handle", labels, "handle") : 1;
+            Measure.HANDLE_MINING_SPEED, labels, "handle") : 1;
         if (compressor) {
-            double rate = Math.sqrt(bodyRate * handleRate);
+            Double rotation = null;
             if (inputs.containsKey("rotor")) {
                 var rotorStack = inputs.get("rotor");
                 var rotorId = ForgeRegistries.ITEMS.getKey(rotorStack.getItem());
                 if (rotorId == null || !rotorId.toString().equals("pneumaticcraft:turbine_rotor"))
                     throw new IllegalArgumentException("Wrong compressor rotor");
-                Double rotation = rotationRate(rotorStack, rotorId.toString());
-                if (rotation != null) rate = Math.cbrt(bodyRate * handleRate * rotation);
+                rotation = rotationRate(rotorStack, rotorId.toString());
             }
-            rate = Math.max(.75, Math.min(1.5, rate));
+            double rate = compressionRate(bodyRate, handleRate, rotation);
             if (name.equals("manual_compressor")) {
                 int interval = Math.max(3, Math.min(5, (int) Math.round(4 / rate)));
                 rate = 4.0 / interval; // Display the actual whole-tick manual cooldown ratio.
@@ -83,6 +88,19 @@ public final class PneupressureSettings {
         return new MachineSettings(output, Map.of("rotation_rate", Math.max(.75, Math.min(1.5, rotation))), labels, null);
     }
 
+    /** Aggregate consumed mechanical parts before native manual-cooldown quantisation. */
+    public static double compressionRate(double bodyRate, double handleRate, Double rotorRate) {
+        if (!validRate(bodyRate) || !validRate(handleRate) || rotorRate != null && !validRate(rotorRate))
+            throw new IllegalArgumentException("Invalid native moving-part rate");
+        double combined = rotorRate == null ? Math.sqrt(bodyRate * handleRate)
+            : Math.cbrt(bodyRate * handleRate * rotorRate);
+        return Math.max(.75, Math.min(1.5, combined));
+    }
+
+    private static boolean validRate(double value) {
+        return Double.isFinite(value) && value >= .75 && value <= 1.5;
+    }
+
     /** Only an exact, bounded saved rotation setting may influence a later consumed rotor. */
     private static Double rotationRate(ItemStack stack, String output) {
         var settings = SettingsNbt.read(stack.getTag(), output);
@@ -91,21 +109,17 @@ public final class PneupressureSettings {
         return Double.isFinite(rate) && rate >= .75 && rate <= 1.5 ? rate : null;
     }
 
-    private static double rating(ItemStack stack, String shape, String trait, Map<String, String> labels, String role) {
+    private static double rating(ItemStack stack, String shape, Measure measure, Map<String, String> labels, String role) {
+        return NativePartRates.relative(part(stack, shape, labels, role), stack, measure);
+    }
+
+    private static ToolPartItem part(ItemStack stack, String shape, Map<String, String> labels, String role) {
         if (stack == null || !(stack.getItem() instanceof ToolPartItem part)) throw new IllegalArgumentException("Missing Tinkers part");
         var id = ForgeRegistries.ITEMS.getKey(stack.getItem());
         if (id == null || !id.toString().equals(shape)) throw new IllegalArgumentException("Wrong part shape");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported part material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        var policy = catalog.policies().get(material.toString());
-        if (policy == null) policy = catalog.policies().get(material.getId().toString());
-        var iron = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || iron == null || !policy.supportedParts().contains(shape))
-            throw new IllegalArgumentException("No part engineering rating");
-        double value = policy.traits().getOrDefault(trait, 0.0), reference = iron.traits().getOrDefault(trait, 0.0);
-        if (!Double.isFinite(value) || value <= 0 || reference <= 0) throw new IllegalArgumentException("No working-part rating");
         labels.put(role, material.toString());
-        return Math.max(.75, Math.min(1.5, value / reference));
+        return part;
     }
 }

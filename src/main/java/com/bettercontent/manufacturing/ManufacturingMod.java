@@ -10,7 +10,6 @@ public final class ManufacturingMod {
         var bus = FMLJavaModLoadingContext.get().getModEventBus();
         ManufacturingContent.ITEMS.register(bus);
         com.bettercontent.manufacturing.integration.plastics.PolymerFluids.register(bus);
-        com.bettercontent.manufacturing.data.EngineeringCatalog.register();
         com.bettercontent.manufacturing.recipe.ManufacturingRecipes.SERIALIZERS.register(bus);
         net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "pneu_empty_tank"),
             com.bettercontent.manufacturing.integration.pneutransfer.PneuTransferEmptyTankIngredient.SERIALIZER);

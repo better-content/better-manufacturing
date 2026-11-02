@@ -11,7 +11,8 @@ public final class ManufacturingContent {
     public static final int COMPONENT_CEILING = 12;
     public static final List<String> COMPONENT_IDS = List.of("pla_stock", "pp_stock", "lactide", "propylene",
             "tin_carboxylate_catalyst", "supported_dehydrogenation_catalyst", "coordination_polymerisation_catalyst",
-            "lactic_culture", "compressed_iron_valve_blank");
+            "lactic_culture", "compressed_iron_valve_blank", "dense_cell_blank", "conductive_casing_blank",
+            "mellarium_temp_blank");
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, ManufacturingMod.ID);
     public static final List<RegistryObject<Item>> COMPONENTS = COMPONENT_IDS.stream()
             .map(id -> ITEMS.register(id, () -> new Item(new Item.Properties()))).toList();

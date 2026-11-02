@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.industrialheat;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -9,7 +9,7 @@ import slimeknights.tconstruct.library.tools.part.ToolPartItem;
 import java.util.Map;
 import java.util.Set;
 
-/** Thermal surface ratings are resolved once at crafting, never during native heat transfer. */
+/** Approximate bounded thermal response from a consumed native TCon plate at craft time. */
 public final class IndustrialHeatSettings {
     public static final String FUNCTION = "better_manufacturing:industrialheat/thermal";
     private static final Set<String> OUTPUTS = Set.of(
@@ -28,25 +28,12 @@ public final class IndustrialHeatSettings {
             throw new IllegalArgumentException("Thermal surface requires a large plate");
         var material = part.getMaterial(stack);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported plate material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        String materialId = material.toString();
-        var policy = catalog.policies().get(materialId);
-        if (policy == null) policy = catalog.policies().get(material.getId().toString());
-        var reference = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || reference == null || !policy.supportedParts().contains(PART))
-            throw new IllegalArgumentException("No thermal surface rating");
-        double value = policy.traits().getOrDefault("heat_transfer", 0.0);
-        double base = reference.traits().getOrDefault("heat_transfer", 0.0);
-        if (!Double.isFinite(value) || !Double.isFinite(base) || value <= 0 || base <= 0)
-            throw new IllegalArgumentException("No thermal transfer rating");
-        double rate = Math.max(.75, Math.min(1.5, value / base));
-        // Thermal envelope is a separate role-specific rating; no live material lookup occurs at runtime.
-        double envelope = policy.traits().getOrDefault("thermal_envelope", 0.0);
-        double referenceEnvelope = reference.traits().getOrDefault("thermal_envelope", 0.0);
-        if (!Double.isFinite(envelope) || !Double.isFinite(referenceEnvelope) || envelope <= 0 || referenceEnvelope <= 0)
-            throw new IllegalArgumentException("No thermal envelope rating");
-        double boundedEnvelope = Math.max(.75, Math.min(1.5, envelope / referenceEnvelope));
-        return new MachineSettings(output, Map.of("heat_transfer", rate, "thermal_envelope", boundedEnvelope),
-            Map.of("thermal_surface", materialId), null);
+        // These native tool stats are APPROXIMATE work/structural proxies, not
+        // measured conductivity or a literal maximum temperature. IH still owns
+        // the source debit, heat conservation, 80-unit ceiling and receiver limits.
+        double work = NativePartRates.relative(part, stack, NativePartRates.Measure.HEAD_MINING_SPEED);
+        double envelope = NativePartRates.relative(part, stack, NativePartRates.Measure.HEAD_DURABILITY);
+        return new MachineSettings(output, Map.of("heat_transfer", work, "thermal_envelope", envelope),
+            Map.of("thermal_surface", material.toString()), null);
     }
 }

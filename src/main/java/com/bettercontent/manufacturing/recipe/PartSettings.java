@@ -1,14 +1,14 @@
 package com.bettercontent.manufacturing.recipe;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.TierSortingRegistry;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
-import slimeknights.tconstruct.library.materials.definition.MaterialId;
 import slimeknights.tconstruct.library.tools.part.ToolPartItem;
 import slimeknights.tconstruct.tools.stats.HeadMaterialStats;
 import java.util.*;
@@ -48,22 +48,21 @@ public final class PartSettings {
         boolean screen = function.equals("better_manufacturing:sifter/frame");
         boolean airflow = function.equals("better_manufacturing:create/airflow");
         boolean fourParts = screen || (airflow && output.equals("create:propeller"));
-        String trait = switch (function) {
-            case "better_manufacturing:sifter/frame" -> "screen_rate";
-            case "better_manufacturing:create/pressing" -> "press_rate";
-            case "better_manufacturing:create/milling" -> "milling_rate";
-            case "better_manufacturing:create/mixing" -> "mixing_rate";
-            case "better_manufacturing:create/airflow" -> "airflow_rate";
-            case "better_manufacturing:create/pumping" -> "pump_rate";
+        // Native head mining speed describes working plates and blades; handle mining speed
+        // describes motion throughput, while handle durability supplies pump pressure.
+        Measure measure = switch (function) {
+            case "better_manufacturing:sifter/frame", "better_manufacturing:create/mixing" -> Measure.HANDLE_MINING_SPEED;
+            case "better_manufacturing:create/pumping" -> Measure.HANDLE_DURABILITY;
+            case "better_manufacturing:create/pressing", "better_manufacturing:create/milling",
+                "better_manufacturing:create/airflow" -> Measure.HEAD_MINING_SPEED;
             default -> null;
         };
-        if (!cutter && trait == null) throw new IllegalArgumentException("Unsupported variant function");
+        if (!cutter && measure == null) throw new IllegalArgumentException("Unsupported variant function");
         if (!MaterialRegistry.isFullyLoaded()) throw new IllegalArgumentException("Material data not loaded");
         if ((!fourParts && inputs.size() != 1) || (fourParts && !inputs.keySet().equals(Set.of("north", "east", "south", "west"))))
             throw new IllegalArgumentException("Wrong variant parts");
         var labels = new LinkedHashMap<String, String>(); double rate = 1.5; String tier = null;
         var registry = MaterialRegistry.getInstance();
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
         for (var entry : inputs.entrySet()) {
             var stack = entry.getValue();
             var itemId = ForgeRegistries.ITEMS.getKey(stack.getItem());
@@ -95,31 +94,16 @@ public final class PartSettings {
                 var required = function.endsWith("sawing") ? Set.of("tconstruct:small_blade", "tconstruct:broad_blade") : Set.of("tconstruct:pick_head");
                 if (!required.contains(itemId.toString())) throw new IllegalArgumentException("Wrong cutter shape");
                 var stats = registry.<HeadMaterialStats>getMaterialStats(material.getId(), HeadMaterialStats.ID).orElseThrow(() -> new IllegalArgumentException("No head stats"));
-                var reference = registry.<HeadMaterialStats>getMaterialStats(new MaterialId("tconstruct:iron"), HeadMaterialStats.ID).orElseThrow();
-                if (!Float.isFinite(stats.miningSpeed()) || stats.miningSpeed() <= 0 || !Float.isFinite(reference.miningSpeed()) || reference.miningSpeed() <= 0)
-                    throw new IllegalArgumentException("Invalid cutting stats");
-                rate = Math.min(rate, clamp(stats.miningSpeed() / reference.miningSpeed()));
+                rate = Math.min(rate, NativePartRates.relative(part, stack, Measure.HEAD_MINING_SPEED));
                 var name = TierSortingRegistry.getName(stats.tier());
                 if (name == null) throw new IllegalArgumentException("Unknown native tier");
                 tier = name.toString();
             } else {
                 String required = airflow ? "tconstruct:small_blade" : screen || function.endsWith("mixing") || function.endsWith("pumping") ? "tconstruct:tool_handle" : "tconstruct:large_plate";
                 if (!itemId.toString().equals(required)) throw new IllegalArgumentException("Wrong working part shape");
-                var policy = catalog.policies().get(materialId);
-                // Native texture variants share their base material's stats/rating unless explicitly overridden.
-                if (policy == null) policy = catalog.policies().get(material.getId().toString());
-                var reference = catalog.policies().get("tconstruct:iron");
-                if (!catalog.ready() || policy == null || reference == null || !policy.supportedParts().contains(itemId.toString()))
-                    throw new IllegalArgumentException("No frame rating");
-                double value = policy.traits().getOrDefault(trait, 0.0), base = reference.traits().getOrDefault(trait, 0.0);
-                if (value <= 0 || base <= 0) throw new IllegalArgumentException("No frame rate");
-                rate = Math.min(rate, clamp(value / base));
+                rate = Math.min(rate, NativePartRates.relative(part, stack, measure));
             }
         }
         return new MachineSettings(output, Map.of(airflow ? "airflow" : function.endsWith("pumping") ? "pressure" : "work_rate", rate), labels, tier);
-    }
-    private static double clamp(double value) {
-        if (!Double.isFinite(value)) throw new IllegalArgumentException("Nonfinite rate");
-        return Math.max(.75, Math.min(1.5, value));
     }
 }

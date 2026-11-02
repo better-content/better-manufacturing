@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.diesel;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-/** Engine-family ratings are calculated only when crafting; native engines never consult material policies. */
+/** Native Tinkers part stats are frozen at crafting; engines never consult a material-rating table. */
 public final class DieselSettings {
     public static final String FUNCTION = "better_manufacturing:createdieselgenerators/engines";
     public static final String PISTON = "createdieselgenerators:engine_piston";
@@ -38,12 +38,9 @@ public final class DieselSettings {
         if (turbo && !inputs.keySet().equals(Set.of("rod", "chamber", "impeller")))
             throw new IllegalArgumentException("Turbocharger requires its configured propeller");
 
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        if (!catalog.ready()) throw new IllegalArgumentException("Engine rating catalog unavailable");
-        var reference = catalog.policies().get("tconstruct:iron");
-        if (reference == null) throw new IllegalArgumentException("Missing iron engine reference");
         var labels = new LinkedHashMap<String, String>();
-        double conversion = 0, load = 0, thermal = 0;
+        double rodConversion = 0, chamberConversion = 0, rodLoad = 0, chamberLoad = 0;
+        double conversion, load, thermal;
         double childConversion = 0, childLoad = 0, childThermal = 0;
         int children = 0;
         double impeller = 1;
@@ -58,14 +55,13 @@ public final class DieselSettings {
                 var material = part.getMaterial(stack);
                 if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Invalid engine part material");
                 String materialId = material.toString();
-                var policy = catalog.policies().getOrDefault(materialId, catalog.policies().get(material.getId().toString()));
-                if (policy == null || !policy.supportedParts().contains(required))
-                    throw new IllegalArgumentException("No engine material rating: " + materialId);
                 labels.put(role, materialId);
-                double weight = role.equals("rod") ? .45 : .55;
-                conversion += weight * rated(policy.traits().get("diesel_conversion"), reference.traits().get("diesel_conversion"));
-                load += weight * rated(policy.traits().get("diesel_load"), reference.traits().get("diesel_load"));
-                thermal += weight * rated(policy.traits().get("diesel_thermal"), reference.traits().get("diesel_thermal"));
+                double nativeConversion = NativePartRates.relative(part, stack, role.equals("rod")
+                    ? NativePartRates.Measure.HANDLE_MINING_SPEED : NativePartRates.Measure.HEAD_MINING_SPEED);
+                double nativeLoad = NativePartRates.relative(part, stack, role.equals("rod")
+                    ? NativePartRates.Measure.HANDLE_DURABILITY : NativePartRates.Measure.HEAD_DURABILITY);
+                if (role.equals("rod")) { rodConversion = nativeConversion; rodLoad = nativeLoad; }
+                else { chamberConversion = nativeConversion; chamberLoad = nativeLoad; }
             } else if (role.equals("impeller")) {
                 if (!turbo || !id.equals("create:propeller")) throw new IllegalArgumentException("Wrong turbo impeller");
                 MachineSettings propeller = configured(stack, "create:propeller", "airflow");
@@ -83,6 +79,11 @@ public final class DieselSettings {
                 labels.put(role, child == null ? required : "configured " + required);
             }
         }
+        conversion = mechanicalRate(rodConversion, chamberConversion);
+        load = mechanicalRate(rodLoad, chamberLoad);
+        // Approximate the bounded thermal envelope from native structural
+        // durability, not a second material rating or a source of free heat.
+        thermal = load;
         if (children > 0) {
             conversion = .5 * (conversion + childConversion / children);
             load = .5 * (load + childLoad / children);
@@ -108,10 +109,9 @@ public final class DieselSettings {
         return settings;
     }
 
-    private static double rated(Double stat, Double reference) {
-        if (stat == null || reference == null || !Double.isFinite(stat) || !Double.isFinite(reference)
-            || stat <= 0 || reference <= 0) throw new IllegalArgumentException("No engine family rating");
-        return bound(stat / reference);
+    /** Same physical shaft/chamber weighting for native conversion and structural load. */
+    public static double mechanicalRate(double shaft, double chamber) {
+        return bound(.45 * shaft + .55 * chamber);
     }
     private static double bound(double value) {
         if (!Double.isFinite(value)) throw new IllegalArgumentException("Nonfinite engine rating");

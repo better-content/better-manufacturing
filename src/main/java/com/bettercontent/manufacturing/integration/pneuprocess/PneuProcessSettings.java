@@ -1,7 +1,8 @@
 package com.bettercontent.manufacturing.integration.pneuprocess;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -29,10 +30,6 @@ public final class PneuProcessSettings {
                 : chemistry ? Set.of("liner") : Set.of("plate", "handle");
         if (!inputs.keySet().equals(required) || !MaterialRegistry.isFullyLoaded())
             throw new IllegalArgumentException("Wrong process part bindings or material registry unavailable");
-        var snapshot = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        if (!snapshot.ready()) throw new IllegalArgumentException("Engineering ratings unavailable");
-        var iron = snapshot.policies().get("tconstruct:iron");
-        if (iron == null) throw new IllegalArgumentException("Missing iron reference");
         var materials = new LinkedHashMap<String, String>();
         double rate = 1.5;
         double rotorProduct = 1;
@@ -57,20 +54,28 @@ public final class PneuProcessSettings {
                 throw new IllegalArgumentException("Wrong process part shape");
             var material = part.getMaterial(stack);
             if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported part material");
-            String label = material.toString();
-            var policy = snapshot.policies().getOrDefault(label, snapshot.policies().get(material.getId().toString()));
-            if (policy == null || !policy.supportedParts().contains(requiredShape)) throw new IllegalArgumentException("No material rating");
-            String trait = chemistry ? "pneu_process_rate" : "pneu_thermal_transfer";
-            double value = policy.traits().getOrDefault(trait, 0d), reference = iron.traits().getOrDefault(trait, 0d);
-            if (!Double.isFinite(value) || value <= 0 || !Double.isFinite(reference) || reference <= 0)
-                throw new IllegalArgumentException("Missing process rating");
-            rate = Math.min(rate, Math.max(.75, Math.min(1.5, value / reference)));
-            materials.put(role, label);
+            materials.put(role, material.toString());
+            // Approximate operating throughput from native tool stats: plate
+            // working speed, moving pump-handle speed, or structural support
+            // durability. This is not a fluid/temperature admission rule.
+            Measure measure = role.equals("handle")
+                ? output.equals("pneumaticcraft:vacuum_pump") ? Measure.HANDLE_MINING_SPEED : Measure.HANDLE_DURABILITY
+                : Measure.HEAD_MINING_SPEED;
+            rate = Math.min(rate, NativePartRates.relative(part, stack, measure));
         }
         // Rotor is an already-configured component; transfer only its final rating, not its former parts.
-        if (rotorCount > 0) rate = Math.sqrt(rate * Math.pow(rotorProduct, 1d / rotorCount));
-        // These are performance settings, NOT new restrictions on fluids, heat, pressure or chemistry.
+        rate = motionRate(rate, rotorProduct, rotorCount);
+        // Keep original saved property keys and native operating/cost limits;
+        // these bounded stat proxies are not measured chemistry or heat safety.
         return new MachineSettings(output, Map.of(chemistry ? "process_rate" : output.equals("pneumaticcraft:vacuum_pump")
                 || output.equals("pneumaticcraft:vacuum_trap") ? "transfer_rate" : "thermal_transfer", rate), materials, null);
+    }
+
+    /** Already-baked native rotor motion can contribute without rereading its consumed parts. */
+    public static double motionRate(double handleRate, double rotorProduct, int rotorCount) {
+        if (!Double.isFinite(handleRate) || handleRate < .75 || handleRate > 1.5
+            || rotorCount < 0 || rotorCount > 2 || !Double.isFinite(rotorProduct) || rotorProduct <= 0)
+            throw new IllegalArgumentException("Invalid moving component rate");
+        return rotorCount == 0 ? handleRate : Math.sqrt(handleRate * Math.pow(rotorProduct, 1d / rotorCount));
     }
 }

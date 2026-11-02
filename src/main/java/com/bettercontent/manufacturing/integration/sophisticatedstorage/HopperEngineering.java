@@ -1,7 +1,7 @@
 package com.bettercontent.manufacturing.integration.sophisticatedstorage;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import java.util.Map;
 import net.minecraft.world.item.ItemStack;
@@ -25,20 +25,16 @@ public final class HopperEngineering {
             throw new IllegalArgumentException("Hopper requires a tool handle");
         var material = part.getMaterial(handle);
         if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Unsupported handle material");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        var materialId = material.toString();
-        var policy = catalog.policies().get(materialId);
-        if (policy == null) policy = catalog.policies().get(material.getId().toString());
-        var iron = catalog.policies().get("tconstruct:iron");
-        if (!catalog.ready() || policy == null || iron == null
-                || !policy.supportedParts().contains("tconstruct:tool_handle"))
-            throw new IllegalArgumentException("No hopper handle rating");
-        double rating = policy.traits().getOrDefault("transfer_rate", 0.0);
-        double reference = iron.traits().getOrDefault("transfer_rate", 0.0);
-        if (!Double.isFinite(rating) || rating <= 0 || !Double.isFinite(reference) || reference <= 0)
-            throw new IllegalArgumentException("No hopper transfer rating");
-        double ratio = Math.max(.75, Math.min(1.5, rating / reference));
-        return new MachineSettings(output, Map.of("transfer_rate", ratio), Map.of("actuator", materialId), null);
+        // Native handle mining speed sets the saved cooldown ratio; the installed
+        // upgrade still owns its filters, directions, stack size and tier.
+        double ratio = NativePartRates.relative(part, handle, NativePartRates.Measure.HANDLE_MINING_SPEED);
+        return new MachineSettings(output, Map.of("transfer_rate", ratio), Map.of("actuator", material.toString()), null);
+    }
+
+    /** Native upgrade tier is the baseline; only a bounded saved handle work rate changes cadence. */
+    public static long ratedInterval(long nativeTicks, double rate) {
+        if (nativeTicks <= 0 || !Double.isFinite(rate) || rate < .75 || rate > 1.5) return nativeTicks;
+        return Math.max(1, Math.round(nativeTicks / rate));
     }
 
     /** Native upgrade item retains its own tier/configured interval and transfer stack/filter capabilities. */
@@ -50,7 +46,6 @@ public final class HopperEngineering {
         var settings = SettingsNbt.read(installedUpgrade.getTag(), id.toString());
         if (settings == null) return nativeTicks;
         double rate = settings.properties().getOrDefault("transfer_rate", 1.0);
-        if (!Double.isFinite(rate) || rate < .75 || rate > 1.5) return nativeTicks;
-        return Math.max(1, Math.round(nativeTicks / rate));
+        return ratedInterval(nativeTicks, rate);
     }
 }

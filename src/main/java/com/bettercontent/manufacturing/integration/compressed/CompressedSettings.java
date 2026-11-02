@@ -1,7 +1,8 @@
 package com.bettercontent.manufacturing.integration.compressed;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
-import com.bettercontent.manufacturing.data.EngineeringCatalog;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -28,10 +29,6 @@ public final class CompressedSettings {
             default -> Set.of("plate");
         };
         if (!inputs.keySet().equals(required)) throw new IllegalArgumentException("Wrong compressed working assembly");
-        var catalog = EngineeringCatalog.view(EngineeringCatalog.clientThread());
-        if (!catalog.ready()) throw new IllegalArgumentException("Missing engineering material ratings");
-        var iron = catalog.policies().get("tconstruct:iron");
-        if (iron == null) throw new IllegalArgumentException("Missing reference rating");
         var labels = new LinkedHashMap<String, String>();
         double rate = 1.5;
         for (var input : inputs.entrySet()) {
@@ -45,7 +42,8 @@ public final class CompressedSettings {
                 var existing = SettingsNbt.read(stack.getTag(), expected);
                 // Legacy/unconfigured components are valid native assemblies at reference performance.
                 if (existing == null || !existing.properties().keySet().equals(Set.of(property))) {
-                    rate = Math.min(rate, 1); labels.put(role, expected); continue;
+                    rate = Math.min(rate, 1);
+                    labels.put(role, expected); continue;
                 }
                 double inherited = existing.properties().get(property);
                 if (!Double.isFinite(inherited) || inherited < .75 || inherited > 1.5) throw new IllegalArgumentException("Invalid inherited setting");
@@ -63,20 +61,25 @@ public final class CompressedSettings {
             var material = part.getMaterial(stack);
             if (!part.canUseMaterial(material.getId())) throw new IllegalArgumentException("Incompatible material");
             String materialId = material.toString(); labels.put(role, materialId);
-            var policy = catalog.policies().getOrDefault(materialId, catalog.policies().get(material.getId().toString()));
-            if (policy == null || !policy.supportedParts().contains(requiredPart)) throw new IllegalArgumentException("Missing part rating");
-            String rating = switch (role) {
-                case "blade", "handle" -> property.equals("conversion") ? "conversion_rate" : "blower_rate";
-                case "plate" -> property.equals("pressure_envelope") ? "pressure_envelope" : "conversion_rate";
-                default -> throw new IllegalArgumentException("Unknown rating");
-            };
-            double value = policy.traits().getOrDefault(rating, 0.0);
-            double base = iron.traits().getOrDefault(rating, 0.0);
-            if (!Double.isFinite(value) || !Double.isFinite(base) || value <= 0 || base <= 0) throw new IllegalArgumentException("Unrated part");
-            rate = Math.min(rate, Math.max(.75, Math.min(1.5, value / base)));
+            // Approximate native stat proxies, never a manufactured per-material
+            // airflow, conversion or certified pressure rating. Structural plate
+            // durability can only reduce, not raise, the native pressure tier.
+            Measure measure = role.equals("blade") || role.equals("plate") && !property.equals("pressure_envelope")
+                ? Measure.HEAD_MINING_SPEED
+                : role.equals("plate") ? Measure.HEAD_DURABILITY : Measure.HANDLE_MINING_SPEED;
+            rate = boundedPartRate(rate, NativePartRates.relative(part, stack, measure));
         }
-        // Pressure safety must never raise the native pressure tier, only condition its safe envelope.
+        // Preserve saved property keys and inherited component rates. Never
+        // exceed the native pressure tier, even with a stronger plate.
         if (property.equals("pressure_envelope")) rate = Math.min(1, rate);
         return new MachineSettings(output, Map.of(property, rate), labels, null);
+    }
+
+    /** Weakest actual consumed part or previously baked component limits assembly response. */
+    public static double boundedPartRate(double previous, double nativeRelative) {
+        if (!Double.isFinite(previous) || previous < .75 || previous > 1.5
+            || !Double.isFinite(nativeRelative) || nativeRelative < .75 || nativeRelative > 1.5)
+            throw new IllegalArgumentException("Invalid native assembly rate");
+        return Math.min(previous, nativeRelative);
     }
 }
