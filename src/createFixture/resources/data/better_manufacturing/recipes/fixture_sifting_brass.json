@@ -1,0 +1,7 @@
+{
+  "type": "createsifter:sifting",
+  "ingredients": [{"item": "minecraft:cactus"}, {"item": "createsifter:brass_mesh"}],
+  "processingTime": 160,
+  "results": [{"item": "minecraft:gold_nugget", "count": 2}, {"item": "minecraft:redstone"}],
+  "waterlogged": false
+}

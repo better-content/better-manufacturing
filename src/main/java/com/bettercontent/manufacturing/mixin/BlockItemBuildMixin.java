@@ -13,6 +13,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class BlockItemBuildMixin {
     @Inject(method = "updateCustomBlockEntityTag(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/item/ItemStack;)Z", at = @At("RETURN"))
     private static void manufacturing$install(Level level, Player player, BlockPos pos, ItemStack stack, CallbackInfoReturnable<Boolean> callback) {
-        CreateManufacturing.install(level, pos, stack);
+        if (net.minecraftforge.fml.ModList.get().isLoaded("create")) CreateManufacturing.install(level, pos, stack);
+        if (net.minecraftforge.fml.ModList.get().isLoaded("compressedcreativity"))
+            com.bettercontent.manufacturing.integration.compressed.CompressedVariant.install(level, pos, stack);
+        if (net.minecraftforge.fml.ModList.get().isLoaded("powergrid"))
+            com.bettercontent.manufacturing.integration.powergrid.PowergridRatings.install(level.getBlockEntity(pos), stack);
+        if (net.minecraftforge.fml.ModList.get().isLoaded("ae2") || net.minecraftforge.fml.ModList.get().isLoaded("rats"))
+            com.bettercontent.manufacturing.integration.precisionquarry.PrecisionQuarrySettings.installBlock(level, pos, stack);
     }
 }

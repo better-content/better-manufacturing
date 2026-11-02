@@ -40,6 +40,49 @@ public final class MaterialCraftingTests {
         return ManufacturingRecipes.SHAPED.get().fromJson(new ResourceLocation("better_manufacturing:fixture"), JsonParser.parseString(json).getAsJsonObject());
     }
     @GameTest(template = "empty")
+    public static void explicitSubassemblyTransfers(GameTestHelper helper) {
+        var serializer = ManufacturingRecipes.SHAPED.get();
+        var sourceRecipe = serializer.fromJson(new ResourceLocation("better_manufacturing:subassembly_fixture"), JsonParser.parseString("""
+            {"type":"better_manufacturing:material_shaped","pattern":["PP"],
+             "key":{"P":{"item":"tconstruct:pick_head"}},"result":{"item":"minecraft:furnace"},
+             "function":"better_manufacturing:fixture","qualifications":["test:fixture_access"],
+             "transfers":[{"role":"head","slot":0},{"role":"support","slot":1}]}
+            """).getAsJsonObject());
+        var input = grid(); input.setItem(0, head()); input.setItem(1, head());
+        input.getItem(1).getOrCreateTag().putInt("BetterContentJackhammerWear", 7);
+        var source = sourceRecipe.assemble(input, helper.getLevel().registryAccess());
+        String upgradedJson = """
+            {"type":"better_manufacturing:material_shaped","pattern":["FC"],
+             "key":{"F":{"item":"minecraft:furnace"},"C":{"item":"minecraft:cobblestone"}},
+             "result":{"item":"minecraft:smoker"},"function":"better_manufacturing:fixture_upgrade",
+             "transfers":[{"role":"cutter","slot":0,"source_role":"head","source_function":"better_manufacturing:fixture"},
+                          {"role":"brace","slot":0,"source_role":"support","source_function":"better_manufacturing:fixture"}],
+             "qualification_transfers":[{"slot":0,"qualification":"test:fixture_access"}]}
+            """;
+        var json = JsonParser.parseString(upgradedJson).getAsJsonObject();
+        var upgraded = serializer.fromJson(new ResourceLocation("better_manufacturing:upgrade_fixture"), json);
+        var shifted = grid(); shifted.setItem(7, new ItemStack(net.minecraft.world.item.Items.COBBLESTONE)); shifted.setItem(8, source);
+        var result = upgraded.assemble(shifted, helper.getLevel().registryAccess());
+        helper.assertTrue(!result.isEmpty(), "Explicit mirrored subassembly transfer failed");
+        var before = BuildNbt.read(source.getTag(), "minecraft:furnace", "better_manufacturing:fixture").build();
+        var after = BuildNbt.read(result.getTag(), "minecraft:smoker", "better_manufacturing:fixture_upgrade").build();
+        helper.assertTrue(after.components().get("cutter").equals(before.components().get("head"))
+            && after.components().get("brace").equals(before.components().get("support")) && after.qualifications().equals(before.qualifications()), "Subassembly lost quantities, original wear or access identity");
+        var buffer = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            serializer.toNetwork(buffer, upgraded);
+            var copy = serializer.fromNetwork(upgraded.getId(), buffer);
+            helper.assertTrue(ItemStack.isSameItemSameTags(copy.assemble(shifted, helper.getLevel().registryAccess()), result), "Network subassembly bindings changed");
+        } finally { buffer.release(); }
+        json.getAsJsonArray("transfers").remove(1);
+        helper.assertTrue(serializer.fromJson(upgraded.getId(), json).assemble(shifted, helper.getLevel().registryAccess()).isEmpty(), "Subassembly silently lost an unaccounted component");
+        json = JsonParser.parseString(upgradedJson).getAsJsonObject(); json.remove("qualification_transfers");
+        helper.assertTrue(serializer.fromJson(upgraded.getId(), json).assemble(shifted, helper.getLevel().registryAccess()).isEmpty(), "Subassembly silently lost progression identity");
+        source.getOrCreateTag().putString("Inventory", "preserve");
+        helper.assertTrue(upgraded.assemble(shifted, helper.getLevel().registryAccess()).isEmpty() && source.getTag().contains("Inventory"), "Subassembly erased unsupported inventory metadata");
+        helper.succeed();
+    }
+    @GameTest(template = "empty")
     public static void mirroredOffsetCrafting(GameTestHelper helper) {
         var recipe = recipe(1); var grid = grid();
         grid.setItem(4, new ItemStack(net.minecraft.world.item.Items.COBBLESTONE)); grid.setItem(5, head());
@@ -72,7 +115,8 @@ public final class MaterialCraftingTests {
     }
     @GameTest(template = "empty")
     public static void recipeNetworkRoundTrip(GameTestHelper helper) {
-        var original = recipe(1);
+        var base = recipe(1);
+        var original = new MaterialShapedRecipe(base.base(), base.function(), base.transfers(), java.util.Set.of("test:fixture_access"));
         var buffer = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         try {
             ManufacturingRecipes.SHAPED.get().toNetwork(buffer, original);
@@ -100,6 +144,42 @@ public final class MaterialCraftingTests {
         boolean rejected = false;
         try { NativeParts.read(input); } catch (IllegalArgumentException tooDeep) { rejected = true; }
         helper.assertTrue(rejected && input.getTag().contains("display"), "Nested metadata was accepted or erased");
+        helper.succeed();
+    }
+    @GameTest(template = "empty")
+    public static void shapelessBindingsAndAccess(GameTestHelper helper) {
+        var json = JsonParser.parseString("""
+            {"type":"better_manufacturing:material_shapeless","ingredients":[{"item":"minecraft:cobblestone"},{"item":"tconstruct:pick_head"}],
+             "result":{"item":"minecraft:furnace"},"function":"better_manufacturing:fixture",
+             "transfers":[{"role":"head","ingredient":1}],"qualifications":["test:fixture_access"]}
+            """).getAsJsonObject();
+        var serializer = ManufacturingRecipes.SHAPELESS.get();
+        var recipe = serializer.fromJson(new ResourceLocation("better_manufacturing:shapeless_fixture"), json);
+        var grid = grid(); grid.setItem(8, new ItemStack(net.minecraft.world.item.Items.COBBLESTONE)); grid.setItem(2, head());
+        var before = grid.getItem(2).copy();
+        var result = recipe.assemble(grid, helper.getLevel().registryAccess());
+        var decoded = BuildNbt.read(result.getTag(), "minecraft:furnace", "better_manufacturing:fixture");
+        helper.assertTrue(!result.isEmpty() && decoded.valid() && decoded.build().qualifications().equals(java.util.Set.of("test:fixture_access")), "Shapeless recipe failed to bind ingredient/access");
+        helper.assertTrue(ItemStack.isSameItemSameTags(before, grid.getItem(2)), "Shapeless preview modified input");
+        var buffer = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            serializer.toNetwork(buffer, recipe);
+            var copy = serializer.fromNetwork(recipe.getId(), buffer);
+            helper.assertTrue(ItemStack.isSameItemSameTags(result, copy.assemble(grid, helper.getLevel().registryAccess())), "Shapeless network lost provenance/access");
+        } finally { buffer.release(); }
+        grid.getItem(2).getOrCreateTag().putString("UnreviewedInventory", "keep");
+        helper.assertTrue(recipe.assemble(grid, helper.getLevel().registryAccess()).isEmpty() && grid.getItem(2).getTag().contains("UnreviewedInventory"), "Unsafe shapeless metadata accepted/erased");
+        json.getAsJsonArray("ingredients").set(0, JsonParser.parseString("{\"item\":\"tconstruct:pick_head\"}"));
+        var transfers = json.getAsJsonArray("transfers");
+        transfers.add(JsonParser.parseString("{\"role\":\"other_head\",\"ingredient\":0}"));
+        recipe = serializer.fromJson(recipe.getId(), json);
+        grid.clearContent(); grid.setItem(0, head());
+        grid.setItem(1, ((ToolPartItem) head().getItem()).withMaterial(new MaterialId("tconstruct:wood")));
+        helper.assertTrue(recipe.assemble(grid, helper.getLevel().registryAccess()).isEmpty(), "Ambiguous material/role assignment was guessed");
+        grid.setItem(1, head());
+        result = recipe.assemble(grid, helper.getLevel().registryAccess());
+        helper.assertTrue(!result.isEmpty() && BuildNbt.read(result.getTag(), "minecraft:furnace", "better_manufacturing:fixture").build().components().size() == 2,
+            "Identical provenance permutations did not match");
         helper.succeed();
     }
     @GameTest(template = "empty")

@@ -11,7 +11,7 @@ class ManufacturingContractsTest {
     private static final String DRILL = "create:mechanical_drill", FUNCTION = "better_manufacturing:cutting";
     private static final MaterialEngineeringProfile.Stat SPEED = new MaterialEngineeringProfile.Stat(HEAD, "mining_speed", BASE);
     private static ComponentProvenance part(String material, long amount) { return new ComponentProvenance(PICK, material, HEAD, amount, true, Map.of()); }
-    private static MachineBuild build(String material) { return new MachineBuild(1, DRILL, FUNCTION, Map.of("head", part(material, 180))); }
+    private static MachineBuild build(String material) { return new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, Map.of("head", part(material, 180))); }
     private static MaterialEngineeringProfile material(double speed) {
         return new MaterialEngineeringProfile(IRON, Set.of(PICK), Map.of(SPEED, speed), Map.of("pressure_limit", 5.0), Set.of("test:water"));
     }
@@ -52,7 +52,7 @@ class ManufacturingContractsTest {
         assertFalse(EngineeringEvaluator.evaluate(MachineBuild.stock("test:other", FUNCTION), profile(), Map.of()).allowed());
     }
     @Test void missingRoleDoesNotFallback() {
-        var b = new MachineBuild(1, DRILL, FUNCTION, Map.of("liner", part(IRON, 90)));
+        var b = new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, Map.of("liner", part(IRON, 90)));
         assertFalse(EngineeringEvaluator.evaluate(b, profile(), Map.of(IRON, material(6))).allowed());
     }
     @Test void unsupportedPartAndMissingStatAreBlocked() {
@@ -68,7 +68,7 @@ class ManufacturingContractsTest {
         assertThrows(IllegalArgumentException.class, () -> material(Double.POSITIVE_INFINITY));
         var roles = new HashMap<String, ComponentProvenance>();
         for (int i = 0; i < 17; i++) roles.put("role_" + i, part(IRON, 90));
-        assertThrows(IllegalArgumentException.class, () -> new MachineBuild(1, DRILL, FUNCTION, roles));
+        assertThrows(IllegalArgumentException.class, () -> new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, roles));
     }
     @Test void batchCreditIsExactAndNotAWholePlatePerOutput() {
         var input = part(IRON, 360);
@@ -81,7 +81,7 @@ class ManufacturingContractsTest {
     @Test void statefulPartsCannotBeSplitOrHaveWearReset() {
         var worn = new ComponentProvenance(PICK, IRON, HEAD, 180, true, Map.of("better_compat_fixes:jackhammer_wear", "37"));
         assertThrows(IllegalArgumentException.class, () -> worn.divide(2));
-        var b = new MachineBuild(1, DRILL, FUNCTION, Map.of("head", worn));
+        var b = new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, Map.of("head", worn));
         var changed = b.replace("head", part("tconstruct:copper", 180), true);
         assertEquals(worn, changed.recovered()); assertEquals("37", changed.recovered().retainedData().get("better_compat_fixes:jackhammer_wear"));
     }
@@ -91,12 +91,12 @@ class ManufacturingContractsTest {
     }
     @Test void retoolPreservesOtherRolesAndReturnsOnlyRemovedPart() {
         var first = part(IRON, 180); var second = part("tconstruct:copper", 360);
-        var b = new MachineBuild(1, DRILL, FUNCTION, Map.of("head", first, "liner", second));
+        var b = new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, Map.of("head", first, "liner", second));
         var result = b.replace("head", part("tconstruct:steel", 180), true);
         assertEquals(first, result.recovered()); assertEquals(second, result.build().components().get("liner"));
         assertEquals(first, b.components().get("head"));
     }
-    @Test void vacuumIsARangeNotAMinimumPressureCheck() {
+    @Test void gaugePressureCanUseBoundedNegativeRanges() {
         var process = new ProcessEnvelope("test:vacuum", new ProcessEnvelope.Range(350, 450), new ProcessEnvelope.Range(-.9, -.5), true);
         assertEquals("", process.blockedReason(new ProcessEnvelope.Conditions(400.0, -.7, true)));
         assertEquals("pressure_out_of_range", process.blockedReason(new ProcessEnvelope.Conditions(400.0, 5.0, true)));
@@ -120,7 +120,7 @@ class ManufacturingContractsTest {
         assertThrows(IllegalArgumentException.class, () -> EngineeringEvaluator.weakestLimit(List.of(), "pressure_limit"));
     }
     @Test void compatibilityChecksOnlyExplicitRoles() {
-        var b = new MachineBuild(1, DRILL, FUNCTION, Map.of("head", part(IRON, 180), "grip", part("test:unknown", 90)));
+        var b = new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, Map.of("head", part(IRON, 180), "grip", part("test:unknown", 90)));
         assertEquals("", EngineeringEvaluator.incompatibleRole(b, List.of("head"), "test:water", Map.of(IRON, material(6))));
         assertFalse(EngineeringEvaluator.incompatibleRole(b, List.of("head"), "test:acid", Map.of(IRON, material(6))).isEmpty());
     }
@@ -136,7 +136,7 @@ class ManufacturingContractsTest {
     }
     @Test void dataIsDefensivelyCopied() {
         var roles = new HashMap<String, ComponentProvenance>(); roles.put("head", part(IRON, 180));
-        var b = new MachineBuild(1, DRILL, FUNCTION, roles); roles.clear();
+        var b = new MachineBuild(MachineBuild.VERSION, DRILL, FUNCTION, roles); roles.clear();
         assertEquals(1, b.components().size());
         assertThrows(UnsupportedOperationException.class, () -> b.components().clear());
     }

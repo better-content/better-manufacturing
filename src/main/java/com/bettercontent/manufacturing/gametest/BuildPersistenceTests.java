@@ -16,7 +16,7 @@ import java.util.Map;
 public final class BuildPersistenceTests {
     private static final String CHASSIS = "create:mechanical_drill", FUNCTION = "better_manufacturing:cutting";
     private static MachineBuild sample() {
-        return new MachineBuild(1, CHASSIS, FUNCTION, Map.of("head", new ComponentProvenance("tconstruct:pick_head",
+        return new MachineBuild(MachineBuild.VERSION, CHASSIS, FUNCTION, Map.of("head", new ComponentProvenance("tconstruct:pick_head",
             "tconstruct:iron#example", "tconstruct:head", 180, true, Map.of("better_compat_fixes:jackhammer_wear", "23"))));
     }
     @GameTest(template = "empty")
@@ -26,6 +26,23 @@ public final class BuildPersistenceTests {
         var result = BuildNbt.read(holder.copy(), CHASSIS, FUNCTION);
         helper.assertTrue(result.valid() && result.build().equals(sample()), "Build/variant/wear did not round trip");
         helper.assertTrue(holder.getInt("UnrelatedNativeData") == 87, "Native data was modified");
+        var qualified = new MachineBuild(MachineBuild.VERSION, CHASSIS, FUNCTION, sample().components(), java.util.Set.of("test:access"));
+        BuildNbt.write(holder, qualified);
+        helper.assertTrue(BuildNbt.read(holder, CHASSIS, FUNCTION).build().equals(qualified), "Qualifications did not round trip");
+        var ids = holder.getCompound(BuildNbt.KEY).getList("qualifications", net.minecraft.nbt.Tag.TAG_STRING);
+        ids.add(net.minecraft.nbt.StringTag.valueOf("test:access"));
+        var invalid = holder.copy();
+        helper.assertTrue(!BuildNbt.read(holder, CHASSIS, FUNCTION).valid() && holder.equals(invalid), "Duplicate qualifications were normalized or mutated");
+        BuildNbt.write(holder, sample());
+        holder.getCompound(BuildNbt.KEY).putInt("version", 1);
+        holder.getCompound(BuildNbt.KEY).remove("qualifications");
+        holder.getCompound(BuildNbt.KEY).putString("function", "better_manufacturing:create/cutting");
+        var legacy = holder.copy();
+        var decoded = BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting");
+        helper.assertTrue(decoded.valid() && decoded.build().version() == MachineBuild.VERSION && decoded.build().qualifications().isEmpty()
+            && decoded.build().components().equals(sample().components()) && holder.equals(legacy), "Valid legacy Drill data was lost or mutated");
+        holder.getCompound(BuildNbt.KEY).put("qualifications", new net.minecraft.nbt.ListTag());
+        helper.assertTrue(!BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting").valid(), "Legacy records accepted unversioned extra fields");
         helper.succeed();
     }
     @GameTest(template = "empty")
@@ -50,7 +67,10 @@ public final class BuildPersistenceTests {
     }
     @GameTest(template = "empty")
     public static void componentBudget(GameTestHelper helper) {
-        helper.assertTrue(ManufacturingContent.COMPONENTS.size() == 7, "Planned component roster changed");
+        helper.assertTrue(ManufacturingContent.COMPONENTS.size() == 9
+            && ManufacturingContent.COMPONENT_IDS.contains("compressed_iron_valve_blank"), "Physical component roster changed");
+        helper.assertTrue(ManufacturingContent.COMPONENTS.size() <= ManufacturingContent.COMPONENT_CEILING,
+            "Component budget exceeded");
         helper.assertTrue(ManufacturingContent.COMPONENTS.stream().allMatch(r -> r.isPresent()), "Missing component registrations");
         long ownBlocks = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKeys().stream()
             .filter(id -> id.getNamespace().equals(ManufacturingMod.ID)).count();

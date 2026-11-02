@@ -11,7 +11,7 @@ if not source.is_relative_to(root / 'build/gametest'): raise SystemExit('Source 
 if not target.is_relative_to(root / 'build/client-fixture') or target.exists(): raise SystemExit('Client target must be fresh and owner-local')
 receipt_path = source / 'execution.json'
 receipt = json.loads(receipt_path.read_text())
-if receipt['status'] != 'passed' or receipt['scope'] != 'core_and_create_drill_userdev': raise SystemExit('Need a passed Create fixture')
+if receipt['status'] != 'passed' or receipt['scope'] != 'core_create_drill_sifter_userdev': raise SystemExit('Need a passed Create/Sifter fixture')
 if not (source / 'world/level.dat').is_file(): raise SystemExit('Native world is missing')
 shutil.copytree(source / 'world', target / 'saves/manufacturing')
 (target / 'options.txt').write_text('guiScale:2\nfullscreen:false\nrenderDistance:4\nsimulationDistance:4\nmaxFps:60\n')

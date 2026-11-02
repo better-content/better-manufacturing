@@ -13,6 +13,8 @@ public abstract class DrillCuttingMixin {
     private void manufacturing$rate(CallbackInfoReturnable<Float> callback) {
         var behaviour = CreateManufacturing.behaviour(this);
         if (behaviour != null) callback.setReturnValue((float) (callback.getReturnValueF() * behaviour.state().rate()));
+        var variant = com.bettercontent.manufacturing.integration.create.KineticVariantBehaviour.get(this);
+        if (variant != null) callback.setReturnValue((float) (callback.getReturnValueF() * variant.rate()));
     }
     @Inject(method = "shouldRun", at = @At("HEAD"), cancellable = true)
     private void manufacturing$invalidBuild(CallbackInfoReturnable<Boolean> callback) {
@@ -23,5 +25,7 @@ public abstract class DrillCuttingMixin {
     private void manufacturing$tier(BlockState state, float hardness, CallbackInfoReturnable<Boolean> callback) {
         var behaviour = CreateManufacturing.behaviour(this);
         if (behaviour != null && !behaviour.state().canCut(state)) callback.setReturnValue(false);
+        var variant = com.bettercontent.manufacturing.integration.create.KineticVariantBehaviour.get(this);
+        if (variant != null && !variant.cutter().canCut(state)) callback.setReturnValue(false);
     }
 }

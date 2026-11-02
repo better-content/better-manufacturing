@@ -1,83 +1,86 @@
-# Better Manufacturing — implementation in progress
+# Better Manufacturing — part-based machine conversion in progress
 
-Forge 1.20.1 / Java 17. Source owner for the approved full-roster chemistry → material →
-part → machine → recovery implementation. **This is not a completed gameplay feature.**
-No runtime JAR has been deployed. No pack recipes or generic-plastic acquisition routes
-have been replaced. Adding this provider to the active-source inventory is not acceptance
-or permission to include an incomplete feature in a release.
+Forge 1.20.1 / Java 17. The active scope is **part-based machine variants**, not the earlier
+chemistry/recovery program. Parts are consumed normally. Their relevant properties are calculated
+once during crafting and stored in `better_manufacturing:settings` (version 1). No original parts,
+wear, refunds, material accounting or qualification history are retained by these recipes.
 
-## Implemented and locally exercised
+**The selected roster is not complete. No Manufacturing JAR has been deployed.**
 
-- Immutable material, machine, process-envelope and adapter contracts; role-specific,
-  reference-normalized evaluation with caps, explicit properties and no generic quality
-  fallback. Stock builds have no refundable provenance.
-- Versioned `better_manufacturing:build` NBT with bounded roles/metadata, strict field
-  types, preservation of malformed/future input, chassis validation and no trusted
-  performance numbers. Live pressure/heat is not cached with material profiles.
-- Native Tinkers head/base and handle/additive-modifier stat reads. No invented
-  pressure, insulation, chemistry or mining-tier-to-quality conversion.
-- `better_manufacturing:material_shaped`, retaining the vanilla crafting recipe type.
-  Transfers explicitly name normalized pattern slots and distinct component roles.
-  Matching includes vanilla shifts/mirroring. Preview and assembly call the same pure
-  computation; networking preserves those declarations. Each current role consumes one
-  native part. Batch costs are divided exactly, and stateful parts cannot be split.
-- Explicit native part costs, checked against pinned Tinkers Part Builder recipes.
-  Reviewed original part metadata (including Jackhammer wear and affix provenance) is
-  retained, not interpreted as an extra machine bonus. Unknown metadata/capabilities
-  reject crafting without altering the source. Nested NBT is bounded before copying.
-- Seven component item identities; no blocks. **No polymer fluids, Tinkers polymer
-  definitions, acquisition recipes, models or production chains yet.**
-- A pack-owned candidate manifest with 467 identities and archive hashes/base recipe
-  IDs. Asset evidence is not a runtime registry/acquisition audit. All entries are
-  pending; five lack asset evidence and several recipe-only families remain unexpanded.
+## Implemented source and pack changes
 
-## Verification
+| Machine/component | Construction and native behavior |
+|---|---|
+| Create Mechanical Drill | Pick head; baked native mining-speed ratio and harvest tier; matching stress; stationary and moving cutting hooks. |
+| Create Mechanical Saw | Small blade; baked native mining-speed ratio/tier; native processing and stationary/moving cutting hooks; matching stress. |
+| Create Mechanical Press | Large plate; authored pressing rating controls native press progress and stress. |
+| Create Millstone | Large plate; authored milling rating controls native processing progress and stress. |
+| Create Whisk / Mechanical Mixer | Handle defines whisk settings; mixer consumes those baked settings and applies them to mixing progress and stress. |
+| Create Propeller / Encased Fan | Four small blades define airflow; fan consumes the propeller settings. Native airflow RPM/distance calculation and force use the rating, with matching stress. Native range caps, obstructions and processing recipes remain native. |
+| Create Mechanical Pump | A handle defines the impeller rating. The native pipe graph receives bounded scaled pump pressure; placement, save, drop, and matching kinetic stress use the baked settings. Existing pipe endpoints, reversal, and fluid recipes remain Create-owned. |
+| Create Sifter / Brass Sifter meshes | String, andesite, zinc and brass meshes consume four handles. Baked screen rate changes native progress and stress; native wet/dry recipes, rolls, overflow and brass filtering are unchanged. |
 
-From this repository (serialize heavyweight Gradle work using the workspace lock):
+Untiered multipliers remain within 0.75–1.5× reference. Cutters use native Tinkers head stats;
+other roles have separate explicit ratings, not a universal quality score. Cheap builds include
+native rock plates/blades and wooden handles. Native texture variants inherit their base rating
+unless specifically overridden. Iron is the reference at **crafting**, never a live runtime dependency.
 
-```sh
-flock /home/dev/.tmp/better-content-gradle.lock ./gradlew --offline --max-workers=2 verifyFast verifyNative stageRuntimeJar
-./gradlew verifyCoverageComplete
-```
+The pack's `20_powered_works.js` overrides upstream press, millstone, mixer and pump recipes; those actual
+progression roots now use the same serializer while retaining Machine Blocks and other gates. The mixer
+consumes its configured native whisk (not an added handle), inheriting the whisk's final rate/labels.
+Brass Hand, Deployer and Mechanical Crafter receive construction-only handle ingredients, preserving
+native functionality and progression. No performance bonuses were invented for these neighbors.
+Existing advanced/custom mesh acquisition closures remain closed.
 
-`verifyFast`: 22 JUnit contract tests, 9 Python build/acceptance-gate tests, and structural
-manifest validation. `verifyNative`: 9 Forge/Tinkers GameTests in a fresh UUID fixture.
-They exercise NBT round trips and malformed records, stock/chassis behavior, the item
-budget, shifted/mirrored assembly, batch attribution, retained wear, rejection of
-unrelated/deep metadata, serializer networking, native stat roles and pinned part costs.
+## Persistence and player display
 
-Each successful native run writes `build/gametest/<uuid>/execution.json`, binding logs,
-compiled classes, resources, production inputs and runtime dependencies. This records a
-**userdev core fixture**, not a staged-JAR machine-adapter or visual acceptance claim.
-`verifyFull` deliberately also requires complete manifest acceptance and currently
-**fails**. Do not replace it with `verifyFast` in release qualification.
+- Versioned settings contain only output identity, bounded properties, material labels and applicable native tier.
+- Missing/invalid settings use native baseline. Unrelated native data is not deleted.
+- Placement, native save/packets, loot/wrench paths, schematic matching and relevant moving-actor paths carry settings.
+- Material reload affects future crafts only; existing machines do not reevaluate materials or refresh their networks.
+- Tooltips/goggles show the applicable multiplier. EMI uses actual configured crafting examples, including configured
+  whisk/propeller ingredients and native material variants. Exact-part retooling recipes and recovery pages are inactive.
 
-`stageRuntimeJar` writes the reobfuscated artifact to
-`build/libs/better-manufacturing-0.1.0.jar`. It does not deploy anything, refresh Packwiz,
-package a release or authorize Smoke/Soak. Source identity metadata covers dirty inputs;
-without a committed HEAD it explicitly reports a source snapshot.
+## Native evidence (scoped)
 
-## Remaining required work
+The archived wave-one core Create/Sifter fixture passed 21/21 native GameTests
+(`build/gametest/2514cfd1-19ef-41ee-945e-4153cd2b3555/execution.json`). The wave-two
+**independent Create/actual-20** Forge userdev profile subsequently passed **31/31 required native
+GameTests** with Create, Sifter, TCon, KubeJS and its selected production scripts/data loaded
+(`build/gametest/856c112d-b73d-41ba-8897-654be127fbe8/execution.json`,
+`/home/dev/.tmp/manufacturing-wave2/runtime-create-native7.log`). This checks the scoped
+configured crafting, native work/stress, consumption and fallback cases, including the
+nonidentity crushing-wheel and paid ejector stress paths. The receipt explicitly records
+`full_roster_accepted=false`: it does **not** qualify the separately required
+Bumblezone/`85_dimension_font_ecology.js`/harvester run, full native boiler/controller timing,
+optional PNCR/fluids/vehicles or polymer chains, nor every selected ID. Source registration and
+recipe JSON alone are not acceptance. Only the runtime owner runs heavyweight checks under the
+shared Gradle lock, offline with at most two workers. No real-client/full-pack run or release
+artifact has been authorized.
 
-The approved plan remains in force; later milestones are not optional:
+## Wave-two work and remaining scope
 
-1. Finish native registry/acquisition/reference audits, explicit transfer/invariant
-   manifests, exclusions and recipe-only family expansion. Resolve stale Backpacks
-   hopper and Clockwork candidate identities without silently substituting features.
-2. Complete intermediate/shapeless/processing/sequenced transfers, safe role-specific
-   retooling/recovery, machine lifecycle persistence, evaluator data/reload/sync and EMI.
-   Demonstrate the full loop on Drill, Sifter, contained Basin and Beetle brakes; wire
-   existing owners and their provider dependencies, preserving Jackhammer ownership.
-3. Add both polymer chains, fluids, actual process/catalyst/vacuum/byproduct support,
-   material definitions/shaping, gas identity, containment, generic-plastic retirement,
-   conservation/bootstrap tests and teaching.
-4. Complete workshop, pressure, heat and electricity adapters and recipe-only neighbors.
-5. Complete biology, logistics, quarry, Little Logistics and Beetle coverage.
-6. Complete Trackwork, Clockwork, Eureka, remaining recipes and every adapter's native
-   lifecycle/accounting/performance evidence. Perform separately authorized real-client
-   gameplay/UI review; headless tests are not visual proof.
+Candidate source, native hooks and conditional recipes now exist across Create bulk/actors/fluids,
+Industrial Heat, PNCR/Compressed, PowerGrid/Diesel, precision/bees, storage/logistics, and
+Clockwork/vehicle families. These additions are **not** accepted family conversions until their
+meaningful native work/resource behavior, effective alternate acquisition and loaded-mod lifecycles
+pass focused tests. Construction-only outputs consume parts without fake performance settings;
+unavailable outputs retain their unavailability and the five Backpacks/Clockwork exclusions remain
+excluded. The original 462 selected IDs are not a count of completed conversions.
 
-No selected machine has been marked implemented or verified by these core fixtures.
-Manufacturing must not depend back on custom-mod API consumers. Rail Beetle, Industrial
-Heat, Airtight Machines, ChemLib Hazards, Compatibility Fixes and contextual learning
-owners retain their existing domains. The pack owns progression and acquisition policy.
+Nine physical components are centrally registered (12 maximum): eight polymer feed/stock/catalyst/
+culture items and one compressed-iron valve blank. The blank is a consumed prepared body for the
+native one-slot PNCR assembly-drill route, not a retained qualification token. Its recipe/hook are
+still subject to loaded PNCR tests. Polymer work has **20 authored process recipes** and scoped
+PLA/PP casting/material assets; the combined Manufacturing/Hazards propylene case, connected powered
+vacuum, first-feed bootstrap, casting/remelt and consumer replacement remain unaccepted. The generic
+PNCR plastic routes must remain until both chains and replacements actually pass. Do not infer a
+measured 30–40 °C fermentation window from the native temperature-unspecified condition.
+
+Older provenance/retool/recovery and process abstractions remain dormant compatibility/history,
+not a wave-two promise of wear, refunds, original-part retention or new chemistry gates. No migration
+system is needed for undeployed experimental records.
+
+The old full-roster/shared-feature gates and ledgers retain their original meaning and are not completion claims
+for this phase. See `docs/source-completion.md` for that historical contract. Do not weaken those gates or count
+infrastructure as converted machines. No full-pack launch, deployment, Packwiz refresh or release packaging is authorized.

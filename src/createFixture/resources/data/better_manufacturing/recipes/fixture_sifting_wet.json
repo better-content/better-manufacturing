@@ -1,0 +1,7 @@
+{
+  "type": "createsifter:sifting",
+  "ingredients": [{"item": "minecraft:cactus"}, {"item": "createsifter:string_mesh"}],
+  "processingTime": 160,
+  "results": [{"item": "minecraft:clay_ball", "count": 2}],
+  "waterlogged": true
+}

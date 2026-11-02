@@ -6,7 +6,23 @@ import java.util.Set;
 
 /** Each numerical axis names exactly one component role and one supported property. */
 public record MachineProfile(String id, String chassis, String function, Map<String, Role> roles,
-                             List<Axis> axes, Map<String, Double> stockValues) {
+                             List<Axis> axes, Map<String, Double> stockValues,
+                             Set<String> requiredQualifications, List<AccessLimit> accessLimits) {
+    public MachineProfile(String id, String chassis, String function, Map<String, Role> roles,
+                          List<Axis> axes, Map<String, Double> stockValues) {
+        this(id, chassis, function, roles, axes, stockValues, Set.of(), List.of());
+    }
+    /** Without this recipe-issued qualification, a stronger material cannot exceed the access ceiling. */
+    public record AccessLimit(String qualification, String axis, double unqualifiedMax) {
+        public AccessLimit {
+            Identifiers.id(qualification); Identifiers.role(axis); Identifiers.finite(unqualifiedMax, "access ceiling");
+        }
+    }
+    public Set<String> acceptedQualifications() {
+        var result = new java.util.HashSet<>(requiredQualifications);
+        accessLimits.forEach(limit -> result.add(limit.qualification()));
+        return Set.copyOf(result);
+    }
     public record Role(Set<String> parts, String statRole) {
         public Role {
             parts = Set.copyOf(parts);
@@ -39,6 +55,12 @@ public record MachineProfile(String id, String chassis, String function, Map<Str
     public MachineProfile {
         Identifiers.id(id); Identifiers.id(chassis); Identifiers.id(function);
         roles = Map.copyOf(roles); axes = List.copyOf(axes); stockValues = Map.copyOf(stockValues);
+        requiredQualifications = Set.copyOf(requiredQualifications); accessLimits = List.copyOf(accessLimits);
+        requiredQualifications.forEach(Identifiers::id);
+        var qualificationIds = new java.util.HashSet<>(requiredQualifications);
+        accessLimits.forEach(limit -> qualificationIds.add(limit.qualification()));
+        if (qualificationIds.size() > MachineBuild.MAX_QUALIFICATIONS || accessLimits.size() > 64)
+            throw new IllegalArgumentException("Too many access rules");
         if (roles.size() > MachineBuild.MAX_ROLES) throw new IllegalArgumentException("Too many roles");
         roles.keySet().forEach(Identifiers::role);
         var names = new java.util.HashSet<String>();
@@ -49,5 +71,12 @@ public record MachineProfile(String id, String chassis, String function, Map<Str
             if (stock == null || !Double.isFinite(stock) || stock < axis.min() || stock > axis.max()) throw new IllegalArgumentException("Invalid stock value");
         }
         if (!stockValues.keySet().equals(names)) throw new IllegalArgumentException("Stock/evaluated axis mismatch");
+        var limits = new java.util.HashSet<String>();
+        for (var limit : accessLimits) {
+            Axis axis = axes.stream().filter(candidate -> candidate.name().equals(limit.axis())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown access axis"));
+            if (!limits.add(limit.qualification() + "/" + limit.axis()) || limit.unqualifiedMax() < axis.min() || limit.unqualifiedMax() > axis.max())
+                throw new IllegalArgumentException("Invalid access ceiling");
+        }
     }
 }

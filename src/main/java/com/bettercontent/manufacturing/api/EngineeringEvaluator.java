@@ -15,6 +15,8 @@ public final class EngineeringEvaluator {
                                       Map<String, MaterialEngineeringProfile> materials) {
         if (!build.chassis().equals(machine.chassis()) || !build.function().equals(machine.function())) return Evaluation.blocked("chassis_mismatch");
         if (!build.hasProvenance()) return new Evaluation(machine.stockValues(), "", false);
+        if (!machine.acceptedQualifications().containsAll(build.qualifications())) return Evaluation.blocked("unknown_qualification");
+        if (!build.qualifications().containsAll(machine.requiredQualifications())) return Evaluation.blocked("missing_qualification");
         if (!build.components().keySet().equals(machine.roles().keySet())) return Evaluation.blocked("component_roles_mismatch");
         for (var entry : machine.roles().entrySet()) {
             var part = build.components().get(entry.getKey());
@@ -29,7 +31,14 @@ public final class EngineeringEvaluator {
             var material = materials.get(part.materialVariant());
             Double input = axis.stat() == null ? material.engineeringTraits().get(axis.trait()) : material.stats().get(axis.stat());
             if (input == null) return Evaluation.blocked("missing_property:" + axis.componentRole() + ":" + axis.name());
-            try { values.put(axis.name(), axis.evaluate(input)); }
+            try {
+                double value = axis.evaluate(input);
+                for (var limit : machine.accessLimits()) {
+                    if (limit.axis().equals(axis.name()) && !build.qualifications().contains(limit.qualification()))
+                        value = Math.min(value, limit.unqualifiedMax());
+                }
+                values.put(axis.name(), value);
+            }
             catch (IllegalArgumentException invalid) { return Evaluation.blocked("invalid_property:" + axis.name()); }
         }
         return new Evaluation(values, "", true);
