@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
     "dev.murad.shipping.entity.custom.train.locomotive.SteamLocomotiveEntity"
 }, remap = false)
 public abstract class LittleLogisticsLocomotiveDropMixin {
-    @Inject(method = "getPickResult", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getPickResult", at = @At("RETURN"), cancellable = true, remap = true)
     private void manufacturing$keep(CallbackInfoReturnable<ItemStack> cir) {
         cir.setReturnValue(LittleLogisticsRuntime.keep((Entity) (Object) this, cir.getReturnValue()));
     }
