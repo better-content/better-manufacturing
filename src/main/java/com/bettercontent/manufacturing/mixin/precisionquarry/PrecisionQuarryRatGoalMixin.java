@@ -29,7 +29,7 @@ public abstract class PrecisionQuarryRatGoalMixin {
         ItemStack installed = RatUpgradeUtils.getUpgrade(rat, quarryUpgrade);
         return PrecisionQuarrySettings.read(installed.getTag(), "rats:rat_upgrade_quarry");
     }
-    @ModifyVariable(method = "tick", at = @At("STORE"), ordinal = 0)
+    @ModifyVariable(method = "tick", at = @At("STORE"), ordinal = 0, remap = true)
     private int manufacturing$breakWork(int nativeTicks) {
         var settings = manufacturing$installedHead();
         return settings == null ? nativeTicks : Math.max(1, (int) Math.round(nativeTicks / settings.rate()));

@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Native placement supplies the exact held stack, including creative and offhand placement. */
 @Mixin(value = AbstractPneumaticCraftBlock.class, remap = false)
 public abstract class PneuTransferPlacementMixin {
-    @Inject(method = "setPlacedBy", at = @At("TAIL"))
+    @Inject(method = "setPlacedBy", at = @At("TAIL"), remap = true)
     private void betterManufacturing$place(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack, CallbackInfo ci) {
         if (level.isClientSide || !(level.getBlockEntity(pos) instanceof PneuTransferSettingsHolder holder)) return;
         String output = String.valueOf(ForgeRegistries.BLOCKS.getKey(state.getBlock()));

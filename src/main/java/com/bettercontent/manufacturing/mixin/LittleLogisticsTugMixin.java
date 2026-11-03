@@ -18,7 +18,7 @@ public abstract class LittleLogisticsTugMixin {
     }
 
     /** Native removal still drops all cargo and route items. Amend only the native tug's own drop. */
-    @ModifyVariable(method = "remove", at = @At("STORE"), ordinal = 0)
+    @ModifyVariable(method = "remove", at = @At("STORE"), ordinal = 0, remap = true)
     private ItemStack manufacturing$drop(ItemStack nativeDrop) {
         return LittleLogisticsRuntime.keep((Entity) (Object) this, nativeDrop);
     }

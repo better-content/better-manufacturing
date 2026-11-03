@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 /** Keep native track validation, orientation, owner and consume flow; attach settings before spawn. */
 @Mixin(targets = "dev.murad.shipping.item.TrainCarItem", remap = false)
 public abstract class LittleLogisticsTrainPlacementMixin {
-    @Redirect(method = "useOn", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z", remap = true))
+    @Redirect(method = "useOn", remap = true, at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z", remap = true))
     private boolean manufacturing$place(Level level, Entity vehicle, UseOnContext context) {
         LittleLogisticsRuntime.apply(vehicle, context.getItemInHand());
         return level.addFreshEntity(vehicle);

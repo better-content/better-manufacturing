@@ -24,13 +24,13 @@ public abstract class PneupressureFuelCompressorMixin implements PneupressureFue
     @Unique private double pneupressure$fuelRemainder;
     @Override public double pneupressure$fuelRemainder() { return pneupressure$fuelRemainder; }
 
-    @Inject(method = "saveAdditional", at = @At("TAIL"))
+    @Inject(method = "saveAdditional", at = @At("TAIL"), remap = true)
     private void pneupressure$saveFuelRemainder(CompoundTag tag, CallbackInfo ci) {
         if (pneupressure$fuelRemainder > 0 && pneupressure$fuelRemainder < 1)
             tag.putDouble(PNEUPRESSURE_FUEL_REMAINDER, pneupressure$fuelRemainder);
     }
 
-    @Inject(method = "load", at = @At("TAIL"))
+    @Inject(method = "load", at = @At("TAIL"), remap = true)
     private void pneupressure$loadFuelRemainder(CompoundTag tag, CallbackInfo ci) {
         double stored = tag.contains(PNEUPRESSURE_FUEL_REMAINDER, Tag.TAG_DOUBLE)
             ? tag.getDouble(PNEUPRESSURE_FUEL_REMAINDER) : 0;

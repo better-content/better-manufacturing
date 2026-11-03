@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Preserve only the baked screen setting through the *native* eight-stage water-filling assembly. */
 @Mixin(value = SequencedAssemblyRecipe.class, remap = false)
 public abstract class CompressedMeshAssemblyMixin {
-    @Shadow public abstract net.minecraft.resources.ResourceLocation getId();
+    @Shadow(remap = true) public abstract net.minecraft.resources.ResourceLocation getId();
     @Inject(method = "advance", at = @At("RETURN"))
     private void manufacturing$meshSettings(ItemStack input, CallbackInfoReturnable<ItemStack> result) {
         if (!getId().toString().equals("compressedcreativity:sequenced_assembly/mesh_splashing")) return;

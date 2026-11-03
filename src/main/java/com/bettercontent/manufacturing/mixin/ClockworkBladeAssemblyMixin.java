@@ -15,7 +15,7 @@ import java.util.Map;
 /** Native variable-length blade assembly retains its shape and max-size check, but not stale source part stacks. */
 @Mixin(targets = "org.valkyrienskies.clockwork.content.contraptions.propeller.blades.item.CraftingTableBladeRecipe", remap = false)
 public abstract class ClockworkBladeAssemblyMixin {
-    @Inject(method = "assemble", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "assemble(Lnet/minecraft/world/inventory/CraftingContainer;Lnet/minecraft/core/RegistryAccess;)Lnet/minecraft/world/item/ItemStack;", at = @At("RETURN"), cancellable = true, remap = true)
     private void manufacturing$assembledBlade(CraftingContainer grid, RegistryAccess registries, CallbackInfoReturnable<ItemStack> callback) {
         var result = callback.getReturnValue();
         if (result == null || result.isEmpty()) return;

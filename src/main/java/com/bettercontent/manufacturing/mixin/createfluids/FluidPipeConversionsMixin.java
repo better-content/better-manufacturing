@@ -17,7 +17,7 @@ public final class FluidPipeConversionsMixin {
     @Mixin(value = FluidPipeBlock.class, remap = false)
     public abstract static class ToGlass {
         @Redirect(method = "onWrenched", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z", remap = true))
         private boolean manufacturing$toGlass(Level level, BlockPos pos, BlockState state) {
             return FluidPipeConversions.swap(level, pos, state, 3);
         }
@@ -25,7 +25,7 @@ public final class FluidPipeConversionsMixin {
     @Mixin(value = GlassFluidPipeBlock.class, remap = false)
     public abstract static class FromGlass {
         @Redirect(method = "onWrenched", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
+            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z", remap = true))
         private boolean manufacturing$fromGlass(Level level, BlockPos pos, BlockState state, int flags) {
             return FluidPipeConversions.swap(level, pos, state, flags);
         }
@@ -33,7 +33,7 @@ public final class FluidPipeConversionsMixin {
     @Mixin(value = EncasedPipeBlock.class, remap = false)
     public abstract static class Encased {
         @Redirect(method = {"onWrenched", "handleEncasing"}, at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z", remap = true))
         private boolean manufacturing$encased(Level level, BlockPos pos, BlockState state) {
             return FluidPipeConversions.swap(level, pos, state, 3);
         }

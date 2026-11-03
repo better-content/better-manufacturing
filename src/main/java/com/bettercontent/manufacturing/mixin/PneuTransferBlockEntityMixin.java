@@ -29,11 +29,11 @@ public abstract class PneuTransferBlockEntityMixin implements PneuTransferSettin
         var block = ((BlockEntity) (Object) this).getBlockState().getBlock();
         return String.valueOf(ForgeRegistries.BLOCKS.getKey(block));
     }
-    @Inject(method = "saveAdditional", at = @At("TAIL"))
+    @Inject(method = "saveAdditional", at = @At("TAIL"), remap = true)
     private void betterManufacturing$save(CompoundTag tag, CallbackInfo ci) {
         if (betterManufacturing$transferSettings != null) SettingsNbt.write(tag, betterManufacturing$transferSettings);
     }
-    @Inject(method = "load", at = @At("TAIL"))
+    @Inject(method = "load", at = @At("TAIL"), remap = true)
     private void betterManufacturing$load(CompoundTag tag, CallbackInfo ci) {
         String output = betterManufacturing$output();
         betterManufacturing$transferSettings = PneuTransferSettings.supports(output) ? SettingsNbt.read(tag, output) : null;
