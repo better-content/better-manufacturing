@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * for a configured item so carrying a full rated tank never deletes its fluid. */
 @Mixin(value = FluidTankItem.class, remap = false)
 public abstract class FluidTankItemCapacityMixin {
-    @Redirect(method = "updateCustomBlockEntityTag", at = @At(value = "INVOKE", target = "Ljava/lang/Math;min(II)I"))
+    @Redirect(method = "updateCustomBlockEntityTag", remap = true, at = @At(value = "INVOKE", target = "Ljava/lang/Math;min(II)I", remap = false))
     private int manufacturing$preserveRatedTank(int nativeCapacity, int amount,
                                                  BlockPos pos, Level level, Player player, ItemStack stack, BlockState state) {
         var settings = SettingsNbt.read(stack.getTag(), "create:fluid_tank");

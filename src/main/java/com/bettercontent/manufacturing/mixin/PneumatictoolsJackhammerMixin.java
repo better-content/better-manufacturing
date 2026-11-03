@@ -7,9 +7,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Native dig modes, upgrades, air reservation and physical-head wear remain PNCR/BCF-owned. */
@@ -33,11 +32,14 @@ public abstract class PneumatictoolsJackhammerMixin {
         if (cir.getReturnValue() && !PneumatictoolsRuntime.canHarvest(jackhammer, state)) cir.setReturnValue(false);
     }
 
-    @ModifyConstant(method = "lambda$onBlockStartBreak$1", constant = @Constant(floatValue = 50.0f), remap = false)
-    private float betterManufacturing$matchedAir(float baseCost, ItemStack jackhammer) {
-        if (PneumatictoolsRuntime.hasPhysicalHead(jackhammer)) return baseCost;
+    // PNCR 6.0.22 stores the per-block reservation (50 * SPEED_MULT, or zero in creative)
+    // in local 17 before its magnet surcharge and affordability/deduction loop. Modify
+    // that first store, not the constant already owned by BCF's physical-head policy.
+    @ModifyVariable(method = "lambda$onBlockStartBreak$1", at = @At(value = "STORE", ordinal = 0), index = 17, require = 1, remap = false)
+    private float betterManufacturing$matchedAir(float perBlockCost, ItemStack jackhammer) {
+        if (PneumatictoolsRuntime.hasPhysicalHead(jackhammer)) return perBlockCost;
         var bit = PneumatictoolsRuntime.installedBit(jackhammer);
-        if (PneumatictoolsRuntime.settings(jackhammer) == null && !PneumatictoolsRuntime.isConfiguredBit(bit)) return baseCost;
-        return (float)(baseCost * PneumatictoolsRuntime.rate(jackhammer));
+        if (PneumatictoolsRuntime.settings(jackhammer) == null && !PneumatictoolsRuntime.isConfiguredBit(bit)) return perBlockCost;
+        return (float)(perBlockCost * PneumatictoolsRuntime.rate(jackhammer));
     }
 }
