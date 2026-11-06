@@ -32,7 +32,7 @@ public final class SteamVariantBehaviour extends BlockEntityBehaviour {
         }
         settings = SettingsNbt.read(tag, "create:steam_engine");
         // Only a complete baked engine envelope may change supplied native
-        // boiler capacity; valid v1 tags for another function remain inert.
+        // boiler capacity; wrong-family tags remain inert.
         if (settings != null && (!settings.properties().keySet().equals(java.util.Set.of("conversion", "mechanical_limit"))
             || settings.properties().values().stream().anyMatch(value -> !Double.isFinite(value)
                 || value < .75 || value > 1.5))) settings = null;

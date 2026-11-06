@@ -2,6 +2,10 @@ package com.bettercontent.manufacturing.gametest;
 
 import com.bettercontent.manufacturing.ManufacturingMod;
 import com.bettercontent.manufacturing.api.MachineSettings;
+import com.bettercontent.manufacturing.api.NumericEvaluator;
+import com.bettercontent.manufacturing.api.NumericInputs;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.integration.create.KineticVariantBehaviour;
 import com.bettercontent.manufacturing.integration.createbulk.BulkNative;
 import com.bettercontent.manufacturing.integration.createbulk.BulkWheelRecipe;
@@ -42,13 +46,34 @@ import java.util.Map;
 @GameTestHolder(ManufacturingMod.ID)
 @PrefixGameTestTemplate(false)
 public final class Wave2CreateBulkTests {
+    // Pinned rock head durability 130 / iron 250 clamps to the native .75
+    // lower bound; the iron hammer's head mining speed supplies 1x load.
+    private static final double NATIVE_ROCK_WHEEL_WORK = .75;
     private Wave2CreateBulkTests() {}
+
+    /** Synthetic persisted boundaries, separate from the real material-craft assertions. */
+    private static MachineSettings wheelBoundary(double work, double load) {
+        var numeric = new NumericInputs(BulkPartSettings.WHEEL,
+            Map.of("hammer", Map.of(Measure.HEAD_MINING_SPEED, new NumericInputs.Stat(work, 1)),
+                "plate", Map.of(Measure.HEAD_DURABILITY, new NumericInputs.Stat(load, 1))), Map.of());
+        String output = "create:crushing_wheel";
+        return new MachineSettings(output, NumericEvaluator.evaluate(output, numeric, null), Map.of(), null, numeric);
+    }
+    private static MachineSettings launcherBoundary(double recharge, double envelope) {
+        var numeric = new NumericInputs(BulkPartSettings.LAUNCHER,
+            Map.of("spring", Map.of(Measure.LIMB_DRAW_SPEED, new NumericInputs.Stat(recharge - 1, 0),
+                Measure.LIMB_VELOCITY, new NumericInputs.Stat(envelope - 1, 0))), Map.of());
+        String output = "create:weighted_ejector";
+        return new MachineSettings(output, NumericEvaluator.evaluate(output, numeric, null), Map.of(), null, numeric);
+    }
 
     @GameTest(template = "drill_workshop", timeoutTicks = 100)
     public static void shiftedMechanicalRecipePreservesPairAndNativeWorkBudget(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("create") && ModList.get().isLoaded("tconstruct"),
             "Real Create/TConstruct dependencies required for wheel native fixture");
-        var recipeId = new ResourceLocation("create:mechanical_crafting/crushing_wheel");
+        // Production20 removes Create's native ID and reauthors the paid pair
+        // under this KubeJS ID using the native mechanical-crafting recipe type.
+        var recipeId = new ResourceLocation("kubejs:powered_works/refinement/crushing_wheels");
         var manager = helper.getLevel().getRecipeManager();
         var found = manager.byKey(recipeId).orElseThrow(() -> {
             boolean resource = helper.getLevel().getServer().getResourceManager()
@@ -100,15 +125,17 @@ public final class Wave2CreateBulkTests {
             + (1 + recipe.parts().get(0).slot() / recipe.getWidth()) * 9;
         var hammer = (ToolPartItem) ForgeRegistries.ITEMS.getValue(new ResourceLocation("tconstruct:hammer_head"));
         var supportedHammer = nativeGrid.getItem(hammerSlot).copy();
-        nativeGrid.setItem(hammerSlot, hammer.withMaterial(MaterialVariantId.parse("tconstruct:rock#stone")));
+        // The loaded pack disables the wood head stat entirely. Rock has a real
+        // native head and must remain valid; wood must not bypass eligibility.
+        nativeGrid.setItem(hammerSlot, hammer.withMaterial(MaterialVariantId.parse("tconstruct:wood#oak")));
         helper.assertTrue(!recipe.matches(nativeGrid, helper.getLevel())
             && recipe.assemble(nativeGrid, helper.getLevel().registryAccess()).isEmpty(),
-            "Unsupported rock hammer material bypassed native part policy");
+            "Unsupported pack wood hammer head bypassed native part policy");
         nativeGrid.setItem(hammerSlot, supportedHammer);
         var pair = recipe.assemble(nativeGrid, helper.getLevel().registryAccess());
         var settings = SettingsNbt.read(pair.getTag(), "create:crushing_wheel");
         helper.assertTrue(pair.getCount() == 2 && pair.is(AllBlocks.CRUSHING_WHEEL.asItem())
-            && settings != null && Math.abs(settings.rate() - .8) < .001
+            && settings != null && Math.abs(settings.rate() - NATIVE_ROCK_WHEEL_WORK) < .001
             && Math.abs(settings.properties().getOrDefault("load", 0.0) - 1) < .001,
             "Native mechanical craft lost its TWO rated wheels or distinct paid load");
         var controllerPos = new BlockPos(4, 2, 4);
@@ -138,8 +165,7 @@ public final class Wave2CreateBulkTests {
             for (double[] probe : new double[][]{{.75, .75}, {1, 1.5}}) {
                 double workRate = probe[0], probeLoad = probe[1];
                 var tag = new CompoundTag();
-                SettingsNbt.write(tag, new MachineSettings("create:crushing_wheel",
-                    Map.of("work_rate", workRate, "load", probeLoad), Map.of(), null));
+                SettingsNbt.write(tag, wheelBoundary(workRate, probeLoad));
                 left.install(tag); right.install(tag);
                 helper.assertTrue(left.settings() != null && right.settings() != null
                     && Math.abs(left.rate() - workRate) < .001 && Math.abs(right.rate() - workRate) < .001,
@@ -156,7 +182,8 @@ public final class Wave2CreateBulkTests {
                         + " actual=" + probeRight + " workRate=" + workRate + " expectedLoad=" + probeLoad);
             }
             left.install(pair.getTag()); right.install(pair.getTag());
-            helper.assertTrue(Math.abs(left.rate() - .8) < .001 && Math.abs(right.rate() - .8) < .001,
+            helper.assertTrue(Math.abs(left.rate() - NATIVE_ROCK_WHEEL_WORK) < .001
+                && Math.abs(right.rate() - NATIVE_ROCK_WHEEL_WORK) < .001,
                 "Wheel pair lost normally installed settings");
             double load = settings.properties().get("load");
             float ratedLeftStress = first.calculateStressApplied(), ratedRightStress = second.calculateStressApplied();
@@ -173,17 +200,19 @@ public final class Wave2CreateBulkTests {
                 && formed.getBlockState().getValue(CrushingWheelControllerBlock.VALID),
                 "Opposite native wheels failed to form valid controller");
             var controller = (CrushingWheelControllerBlockEntity) formed;
-            helper.assertTrue(Math.abs(BulkNative.pairWork(controller, 4f) - 3.2f) < .001,
+            helper.assertTrue(Math.abs(BulkNative.pairWork(controller, 4f) - 4f * NATIVE_ROCK_WHEEL_WORK) < .001,
                 "Native paired controller ignored bounded wheel work or stacked two bonuses");
-            // Structurally valid v1 but implausible load must fall back as a whole,
+            // Invalid v2 native-stat evidence must fall back as a whole,
             // while the original record survives native block-entity save.
             var invalid = pair.getTag().copy();
-            invalid.getCompound(SettingsNbt.KEY).getCompound("properties").putDouble("load", 999);
+            invalid.getCompound(SettingsNbt.KEY).getCompound("parts").getCompound("plate")
+                .getCompound("HEAD_DURABILITY").putDouble("reference", 0);
             for (var wheel : new CrushingWheelBlockEntity[]{first, second}) {
                 var variant = KineticVariantBehaviour.get(wheel); variant.install(invalid);
                 helper.assertTrue(variant.settings() == null
-                    && wheel.saveWithFullMetadata().getCompound(SettingsNbt.KEY).getCompound("properties").getDouble("load") == 999,
-                    "Out-of-range wheel load was applied or destroyed instead of native fallback");
+                    && wheel.saveWithFullMetadata().getCompound(SettingsNbt.KEY).getCompound("parts")
+                        .getCompound("plate").getCompound("HEAD_DURABILITY").getDouble("reference") == 0,
+                    "Invalid wheel stat was applied or destroyed instead of native fallback");
                 float baseline = wheel == first ? nativeLeftStress : nativeRightStress;
                 helper.assertTrue(Math.abs(wheel.calculateStressApplied() - baseline) <= baseline * .001,
                     "Malformed wheel retained paid stress instead of native fallback: baseline=" + baseline
@@ -198,6 +227,9 @@ public final class Wave2CreateBulkTests {
         });
     }
 
+    // Both wheel rigs reach relative x=12. The 3x3x3 empty template leaves
+    // their motors outside its bounds; drill_workshop is 16x6x12, all air,
+    // with no entities, so it contains the entire native test assembly.
     @GameTest(template = "drill_workshop", timeoutTicks = 180)
     public static void poweredWheelControllersActuallyProcessOreWithRatedWorkAndStress(GameTestHelper helper) {
         // This is Create's real iron-ore crushing recipe, not the mechanical wheel craft.
@@ -209,6 +241,25 @@ public final class Wave2CreateBulkTests {
         var finished = new long[]{-1, -1};
         var ejected = new long[]{-1, -1};
         var centers = new BlockPos[]{new BlockPos(4, 2, 4), new BlockPos(11, 2, 4)};
+        var controllers = new CrushingWheelControllerBlockEntity[2];
+        // Register before GameTest starts ticking. Registering onEachTick from
+        // inside tick 10 schedules a second callback for the current tick and
+        // can corrupt the test scheduler or add its final check twice.
+        helper.onEachTick(() -> {
+            for (int i = 0; i < 2; i++) {
+                if (controllers[i] == null) continue;
+                if (finished[i] < 0) {
+                    var inventory = controllers[i].inventory;
+                    if (inventory.appliedRecipe) for (int slot = 1; slot < inventory.getSlots(); slot++)
+                        if (inventory.getStackInSlot(slot).is(result)
+                            && inventory.getStackInSlot(slot).getCount() >= 2) finished[i] = helper.getTick();
+                }
+                if (finished[i] >= 0 && ejected[i] < 0 && !helper.getLevel().getEntitiesOfClass(
+                    ItemEntity.class, new AABB(helper.absolutePos(centers[i])).inflate(2),
+                    entity -> entity.getItem().is(result) && entity.getItem().getCount() >= 2).isEmpty())
+                    ejected[i] = helper.getTick();
+            }
+        });
         for (var center : centers) for (var direction : new Direction[]{Direction.WEST, Direction.EAST}) {
             var wheelPos = center.relative(direction);
             helper.setBlock(wheelPos, AllBlocks.CRUSHING_WHEEL.getDefaultState().setValue(BlockStateProperties.AXIS, Direction.Axis.Y));
@@ -227,7 +278,7 @@ public final class Wave2CreateBulkTests {
             // Build the supported iron-hammer/rock-plate pair through Create's actual
             // shifted mechanical inventory and recipe, as in the existing wheel test.
             var found = helper.getLevel().getRecipeManager()
-                .byKey(new ResourceLocation("create:mechanical_crafting/crushing_wheel")).orElseThrow();
+                .byKey(new ResourceLocation("kubejs:powered_works/refinement/crushing_wheels")).orElseThrow();
             helper.assertTrue(found instanceof BulkWheelRecipe, "Rated wheel craft lost its native serializer");
             var recipe = (BulkWheelRecipe) found;
             CraftingContainer grid = new TransientCraftingContainer(new net.minecraft.world.inventory.AbstractContainerMenu(null, 0) {
@@ -262,10 +313,10 @@ public final class Wave2CreateBulkTests {
             helper.assertTrue(recipe.matches(nativeGrid, helper.getLevel()), "Actual rated wheel craft does not match");
             var pair = recipe.assemble(nativeGrid, helper.getLevel().registryAccess());
             var settings = SettingsNbt.read(pair.getTag(), "create:crushing_wheel");
-            helper.assertTrue(pair.getCount() == 2 && settings != null && Math.abs(settings.rate() - .8) < .001
+            helper.assertTrue(pair.getCount() == 2 && settings != null
+                && Math.abs(settings.rate() - NATIVE_ROCK_WHEEL_WORK) < .001
                 && Math.abs(settings.properties().getOrDefault("load", 0.0) - 1) < .001,
                 "Crafted pair lost rated work or paid native stress");
-            var controllers = new CrushingWheelControllerBlockEntity[2];
             float[] firstStress = new float[2];
             for (int i = 0; i < 2; i++) {
                 var center = centers[i];
@@ -290,40 +341,38 @@ public final class Wave2CreateBulkTests {
                 controllers[i] = (CrushingWheelControllerBlockEntity) controller;
             }
             helper.assertTrue(Math.abs(firstStress[0] / firstStress[1] - 1) < .001,
-                "Crafted .8 work-rate wheel pair changed native stress instead of retaining paid load=1");
+                "Crafted .75 work-rate wheel pair changed native stress instead of retaining paid load=1");
             helper.assertTrue(controllers[0].crushingspeed > 0 && Math.abs(controllers[0].crushingspeed - controllers[1].crushingspeed) < .001,
                 "Wheel controllers do not share the same positive native speed");
             for (int i = 0; i < 2; i++) {
                 var controller = controllers[i];
                 // Two ore make native log2(batchSize)=1; a single item would
                 // clamp both speeds to 20 and hide the real rated work delta.
-                helper.assertTrue(controller.inventory.insertItem(0, new ItemStack(Items.IRON_ORE, 2), false).isEmpty(),
-                    "Native controller rejected real iron ore " + i);
+                var before = controller.inventory.getStackInSlot(0).copy();
+                if (!before.isEmpty()) {
+                    helper.assertTrue(before.is(Items.IRON_ORE) && before.getCount() == 2
+                            && !controller.inventory.appliedRecipe && controller.processingEntity == null,
+                        "Unexpected preexisting native controller input: " + before);
+                    // Remove only the input slot introduced by the shared fixture
+                    // before inserting an explicitly owned two-ore batch below.
+                    controller.inventory.setStackInSlot(0, ItemStack.EMPTY);
+                }
+                helper.assertTrue(controller.inventory.isEmpty(), "Native controller has unrelated preexisting output " + i);
+                var remainder = controller.inventory.insertItem(0, new ItemStack(Items.IRON_ORE, 2), false);
+                helper.assertTrue(remainder.isEmpty(), "Native controller rejected explicit test ore " + i
+                    + ": before=" + before + " remainder=" + remainder + " stored=" + controller.inventory.getStackInSlot(0)
+                    + " entity=" + controller.processingEntity);
                 helper.assertTrue(controller.findRecipe().map(r -> r.getId().equals(crushingId)).orElse(false),
                     "Inserted ore did not select the expected loaded Create crushing recipe " + i);
                 helper.assertTrue(controller.inventory.remainingTime > 20, "Native recipe duration was not initialized " + i);
             }
             var startingDuration = controllers[0].inventory.remainingTime;
-            helper.onEachTick(() -> {
-                for (int i = 0; i < 2; i++) {
-                    if (finished[i] < 0) {
-                        var inventory = controllers[i].inventory;
-                        if (inventory.appliedRecipe) for (int slot = 1; slot < inventory.getSlots(); slot++)
-                            if (inventory.getStackInSlot(slot).is(result)
-                                && inventory.getStackInSlot(slot).getCount() >= 2) finished[i] = helper.getTick();
-                    }
-                    if (finished[i] >= 0 && ejected[i] < 0 && !helper.getLevel().getEntitiesOfClass(
-                        ItemEntity.class, new AABB(helper.absolutePos(centers[i])).inflate(2),
-                        entity -> entity.getItem().is(result) && entity.getItem().getCount() >= 2).isEmpty())
-                        ejected[i] = helper.getTick();
-                }
-            });
             helper.runAtTickTime(16, () -> {
                 float ratedProgress = startingDuration - controllers[0].inventory.remainingTime;
                 float nativeProgress = startingDuration - controllers[1].inventory.remainingTime;
                 helper.assertTrue(ratedProgress > 0 && nativeProgress > 0
-                    && Math.abs(ratedProgress / nativeProgress - .8) < .015,
-                    "Native controller tick did not use paid .8 work at equal input speed: rated="
+                    && Math.abs(ratedProgress / nativeProgress - NATIVE_ROCK_WHEEL_WORK) < .015,
+                    "Native controller tick did not use paid .75 work at equal input speed: rated="
                         + ratedProgress + " default=" + nativeProgress);
                 helper.assertTrue(Math.abs(controllers[0].crushingspeed - controllers[1].crushingspeed) < .001,
                     "Controller progress comparison changed native wheel speed");
@@ -349,7 +398,8 @@ public final class Wave2CreateBulkTests {
         for (int i = 0; i < 2; i++) {
             var material = i == 0 ? "tconstruct:wood#oak" : "tconstruct:iron";
             var spring = ((ToolPartItem) limb).withMaterial(MaterialVariantId.parse(material));
-            var rated = BulkPartSettings.bake("create:weighted_ejector", BulkPartSettings.LAUNCHER, Map.of("spring", spring));
+            var rated = NativePartCapture.bake(BulkPartSettings.LAUNCHER, Map.of("spring", spring),
+                () -> BulkPartSettings.bake("create:weighted_ejector", BulkPartSettings.LAUNCHER, Map.of("spring", spring)));
             prepared[i] = AllBlocks.WEIGHTED_EJECTOR.asStack();
             SettingsNbt.write(prepared[i].getOrCreateTag(), rated);
             helper.setBlock(new BlockPos(2 + i * 4, 2, 3), AllBlocks.WEIGHTED_EJECTOR.getDefaultState());
@@ -381,11 +431,13 @@ public final class Wave2CreateBulkTests {
                 var ratedTarget = ejector.getTargetPosition().subtract(ejector.getBlockPos());
                 if (i == 0) {
                     var invalid = prepared[i].getTag().copy();
-                    invalid.getCompound(SettingsNbt.KEY).getCompound("properties").putDouble("launch_envelope", 999);
+                    invalid.getCompound(SettingsNbt.KEY).getCompound("parts").getCompound("spring")
+                        .getCompound("LIMB_VELOCITY").putDouble("reference", -1);
                     variant.install(invalid);
                     helper.assertTrue(variant.settings() == null
-                        && ejector.saveWithFullMetadata().getCompound(SettingsNbt.KEY).getCompound("properties").getDouble("launch_envelope") == 999,
-                        "Out-of-range launcher envelope applied or lost native saved payload");
+                        && ejector.saveWithFullMetadata().getCompound(SettingsNbt.KEY).getCompound("parts")
+                            .getCompound("spring").getCompound("LIMB_VELOCITY").getDouble("reference") == -1,
+                        "Invalid launcher stat applied or lost native saved payload");
                     float invalidCharge = ejector.getWindUpSpeed(), invalidStress = ejector.calculateStressApplied();
                     float invalidSpeed = ejector.getSpeed();
                     var invalidTarget = ejector.getTargetPosition().subtract(ejector.getBlockPos());
@@ -402,10 +454,18 @@ public final class Wave2CreateBulkTests {
                         "Malformed spring charge did not return to same-BE native reference: " + measured);
                     helper.assertTrue(Math.abs(invalidStress - nativeStress) <= Math.max(.00001f, nativeStress * .0001f),
                         "Malformed spring stress did not return to same-BE native reference: " + measured);
-                    helper.assertTrue(Math.abs(charges[i] / nativeCharge - .75) < .001,
+                    var woodSettings = SettingsNbt.read(prepared[i].getTag(), "create:weighted_ejector");
+                    helper.assertTrue(woodSettings != null, "Real wood spring lost its baked native limb values");
+                    double recharge = woodSettings.properties().get("recharge_rate");
+                    double envelope = woodSettings.properties().get("launch_envelope");
+                    double expectedCharge = Math.max(.75, Math.min(1.5,
+                        recharge * (1 + (envelope - 1) * 11d / 15)));
+                    double expectedStress = Math.max(.75, Math.min(1.5, recharge * Math.max(1, envelope)));
+                    helper.assertTrue(Math.abs(charges[i] / nativeCharge - expectedCharge) < .001,
                         "Crafted wood spring did not rate native windup at far target: " + measured);
-                    helper.assertTrue(Math.abs(stress[i] / nativeStress - .85) < .001,
-                        "Crafted wood spring did not pay rated native stress: " + measured);
+                    helper.assertTrue(Math.abs(stress[i] / nativeStress - expectedStress) < .001
+                            && expectedStress >= expectedCharge,
+                        "Crafted wood spring did not pay at least its native windup work: " + measured);
                 } else {
                     String ironMeasured = "nativeCharge=" + nativeCharge + " ratedCharge=" + charges[i]
                         + " chargeRatio=" + (charges[i] / nativeCharge) + " nativeStress=" + nativeStress
@@ -420,18 +480,22 @@ public final class Wave2CreateBulkTests {
                         "Iron spring changed reference native stress: " + ironMeasured);
                 }
             }
-            helper.assertTrue(charges[1] > 0 && charges[0] > 0 && charges[0] < charges[1],
-                "Native spring windup did not change for distinct materials");
-            helper.assertTrue(stress[0] > 0 && stress[1] > 0 && stress[0] < stress[1],
-                "Ejector gained a faster charge without corresponding stress accounting");
+            // Pinned wood limb draws faster than iron: native draw-speed modifiers
+            // 0 versus -0.2, so wood's 1.25x recharge must also pay >=1.25x stress.
+            helper.assertTrue(charges[1] > 0 && charges[0] > charges[1],
+                "Native spring windup did not change for distinct real materials");
+            helper.assertTrue(stress[1] > 0 && stress[0] > stress[1]
+                    && stress[0] / stress[1] >= charges[0] / charges[1],
+                "Ejector gained faster charge without corresponding native stress accounting");
             var wood = SettingsNbt.read(prepared[0].getTag(), "create:weighted_ejector");
-            helper.assertTrue(wood != null && Math.abs(wood.properties().get("recharge_rate") - .85) < .001
-                && Math.abs(wood.properties().get("launch_envelope") - .75) < .001,
-                "Real wood bow limb no longer has the expected low spring ratings");
+            helper.assertTrue(wood != null && Math.abs(wood.properties().get("recharge_rate") - 1.25) < .001
+                && Math.abs(wood.properties().get("launch_envelope") - (1d / 1.1)) < .001,
+                "Real wood bow limb no longer matches pinned TCon draw/velocity modifiers");
             // Wood is an actual crafted part. The other cases exercise valid persisted
             // ratio BOUNDARIES with no material labels; they do not claim that a new
             // TConstruct material or recipe supplies those synthetic boundary values.
-            double[][] profiles = {{.85, .75}, {1.5, 1.5}, {.75, 1.5}, {1.5, .75}};
+            double[][] profiles = {{wood.properties().get("recharge_rate"), wood.properties().get("launch_envelope")},
+                {1.5, 1.5}, {.75, 1.5}, {1.5, .75}};
             var boundaryBlock = helper.getLevel().getBlockEntity(helper.absolutePos(new BlockPos(6, 2, 3)));
             helper.assertTrue(boundaryBlock instanceof EjectorBlockEntity, "Native launcher boundary fixture disappeared");
             var boundary = (EjectorBlockEntity) boundaryBlock;
@@ -441,8 +505,7 @@ public final class Wave2CreateBulkTests {
                 double recharge = profiles[profile][0], envelope = profiles[profile][1];
                 var tag = new CompoundTag();
                 if (profile == 0) tag = prepared[0].getTag().copy();
-                else SettingsNbt.write(tag, new MachineSettings("create:weighted_ejector",
-                    Map.of("recharge_rate", recharge, "launch_envelope", envelope), Map.of(), null));
+                else SettingsNbt.write(tag, launcherBoundary(recharge, envelope));
                 for (int distance : new int[]{1, 12}) {
                     boundary.setTarget(distance, 0); boundary.setSpeed(64);
                     behaviour.install(new CompoundTag());

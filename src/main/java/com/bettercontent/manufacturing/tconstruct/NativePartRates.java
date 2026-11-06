@@ -32,7 +32,7 @@ public final class NativePartRates {
                 .orElseThrow(() -> new IllegalArgumentException("Missing native head stats"));
             var reference = registry.<HeadMaterialStats>getMaterialStats(iron, HeadMaterialStats.ID)
                 .orElseThrow(() -> new IllegalArgumentException("Missing native iron head stats"));
-            return derive(measure, headValue(selected, measure), headValue(reference, measure));
+            return observed(stack, measure, headValue(selected, measure), headValue(reference, measure));
         }
         if (limb(measure)) {
             if (!part.getStatType().equals(LimbMaterialStats.ID)) throw new IllegalArgumentException("Not a native limb part");
@@ -40,14 +40,20 @@ public final class NativePartRates {
                 .orElseThrow(() -> new IllegalArgumentException("Missing native limb stats"));
             var reference = registry.<LimbMaterialStats>getMaterialStats(iron, LimbMaterialStats.ID)
                 .orElseThrow(() -> new IllegalArgumentException("Missing native iron limb stats"));
-            return derive(measure, limbValue(selected, measure), limbValue(reference, measure));
+            return observed(stack, measure, limbValue(selected, measure), limbValue(reference, measure));
         }
         if (!part.getStatType().equals(HandleMaterialStats.ID)) throw new IllegalArgumentException("Not a native handle part");
         var selected = registry.<HandleMaterialStats>getMaterialStats(material.getId(), HandleMaterialStats.ID)
             .orElseThrow(() -> new IllegalArgumentException("Missing native handle stats"));
         var reference = registry.<HandleMaterialStats>getMaterialStats(iron, HandleMaterialStats.ID)
             .orElseThrow(() -> new IllegalArgumentException("Missing native iron handle stats"));
-        return derive(measure, handleValue(selected, measure), handleValue(reference, measure));
+        return observed(stack, measure, handleValue(selected, measure), handleValue(reference, measure));
+    }
+
+    private static double observed(ItemStack stack, Measure measure, double selected, double reference) {
+        double rate = derive(measure, selected, reference);
+        NativePartCapture.record(stack, measure, selected, reference);
+        return rate;
     }
 
     /** Pure derivation for source-unit tests; machine physical envelope is unchanged. */

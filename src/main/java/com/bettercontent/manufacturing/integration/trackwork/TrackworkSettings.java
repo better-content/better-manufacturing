@@ -2,6 +2,8 @@ package com.bettercontent.manufacturing.integration.trackwork;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import slimeknights.tconstruct.library.materials.MaterialRegistry;
@@ -36,11 +38,15 @@ public final class TrackworkSettings {
             var reference = materials.<LimbMaterialStats>getMaterialStats(iron, LimbMaterialStats.ID).orElseThrow(() -> new IllegalArgumentException("No iron limb reference"));
             load = Math.sqrt((double) selected.durability() / reference.durability());
             response = (1 + selected.drawSpeed()) / (1 + reference.drawSpeed());
+            NativePartCapture.record(stack, NativePartRates.Measure.LIMB_DURABILITY, selected.durability(), reference.durability());
+            NativePartCapture.record(stack, NativePartRates.Measure.LIMB_DRAW_SPEED, selected.drawSpeed(), reference.drawSpeed());
         } else {
             var selected = materials.<HandleMaterialStats>getMaterialStats(material.getId(), HandleMaterialStats.ID).orElseThrow(() -> new IllegalArgumentException("No handle stats"));
             var reference = materials.<HandleMaterialStats>getMaterialStats(iron, HandleMaterialStats.ID).orElseThrow(() -> new IllegalArgumentException("No iron handle reference"));
             load = (1 + selected.durability()) / (1 + reference.durability());
             response = (1 + selected.meleeSpeed()) / (1 + reference.meleeSpeed());
+            NativePartCapture.record(stack, NativePartRates.Measure.HANDLE_DURABILITY, selected.durability(), reference.durability());
+            NativePartCapture.record(stack, NativePartRates.Measure.HANDLE_ATTACK_SPEED, selected.meleeSpeed(), reference.meleeSpeed());
         }
         return new MachineSettings(output, Map.of("mechanical_load", bounded(load), "suspension_response", bounded(response)),
             Map.of("hub_suspension", material.toString()), null);

@@ -2,6 +2,9 @@ package com.bettercontent.manufacturing.gametest;
 
 import com.bettercontent.manufacturing.ManufacturingMod;
 import com.bettercontent.manufacturing.api.MachineSettings;
+import com.bettercontent.manufacturing.api.NumericEvaluator;
+import com.bettercontent.manufacturing.api.NumericInputs;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import com.bettercontent.manufacturing.recipe.PartVariantRecipe;
 import me.desht.pneumaticcraft.api.crafting.recipe.AssemblyRecipe;
@@ -33,6 +36,13 @@ import java.util.Map;
 @GameTestHolder(ManufacturingMod.ID)
 @PrefixGameTestTemplate(false)
 public final class Wave2PneuMechanicsValveTests {
+    private static MachineSettings tubeSettings(double envelope, String material) {
+        var numeric = new NumericInputs("better_manufacturing:pneupressure/pressure",
+            Map.of("body", Map.of(Measure.HEAD_DURABILITY, new NumericInputs.Stat(envelope, 1))), Map.of());
+        String output = "pneumaticcraft:pressure_tube";
+        return new MachineSettings(output, NumericEvaluator.evaluate(output, numeric, null),
+            Map.of("body", material), null, numeric);
+    }
     private static CraftingContainer grid() {
         return new TransientCraftingContainer(new AbstractContainerMenu(null, 0) {
             @Override public ItemStack quickMoveStack(Player player, int slot) { return ItemStack.EMPTY; }
@@ -75,7 +85,9 @@ public final class Wave2PneuMechanicsValveTests {
             && assembly.getOutput().is(item("pneumaticcraft:pressure_chamber_valve").getItem())
             && assembly.getOutput().getCount() == 20 && assembly.getInputAmount() == 1,
             "Native valve drill program or 20-valve gate changed");
-        var cheap = blank(helper, "tconstruct:wood#oak", false);
+        // Pack wood has no head; pinned flint head durability 85 vs iron 250
+        // gives the native plate a real bounded 0.75 pressure envelope.
+        var cheap = blank(helper, "tconstruct:flint", false);
         var baseline = blank(helper, "tconstruct:iron", true);
         helper.assertTrue(assembly.matches(cheap) && assembly.matches(baseline)
             && !assembly.matches(item("pneumaticcraft:compressed_iron_block")), "Original block bypasses material-dependent assembly");
@@ -84,7 +96,7 @@ public final class Wave2PneuMechanicsValveTests {
         helper.assertTrue(cheapSettings != null && normalSettings != null
             && cheapSettings.properties().get("pressure_envelope") == .75
             && normalSettings.properties().get("pressure_envelope") == 1,
-            "Pack wood/iron plates did not bake distinct pressure envelopes");
+            "Eligible flint/iron plates did not bake distinct pressure envelopes");
         var pos = new BlockPos(2, 2, 2);
         var drillBlock = ForgeRegistries.BLOCKS.getValue(new ResourceLocation("pneumaticcraft:assembly_drill"));
         helper.assertTrue(drillBlock != null, "Native assembly drill block missing");
@@ -105,12 +117,14 @@ public final class Wave2PneuMechanicsValveTests {
         helper.assertTrue(unconfigured.getCount() == 20 && SettingsNbt.read(unconfigured.getTag(), "pneumaticcraft:pressure_chamber_valve") == null,
             "Malformed saved blank settings were promoted into a rated valve");
         var outOfRange = cheap.copy();
-        outOfRange.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("properties").putDouble("pressure_envelope", 1.5);
+        outOfRange.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("parts")
+            .getCompound("body").getCompound("HEAD_DURABILITY").putDouble("reference", 0);
         var downgraded = (ItemStack) lookup.invoke(drill, outOfRange);
         helper.assertTrue(downgraded.getCount() == 20 && SettingsNbt.read(downgraded.getTag(), "pneumaticcraft:pressure_chamber_valve") == null,
-            "Out-of-range pressure on blank was promoted to valve");
+            "Invalid blank durability reference was promoted to valve");
         var wrongProperty = cheap.copy();
-        wrongProperty.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("properties").putDouble("rotation_rate", 1.5);
+        wrongProperty.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("parts")
+            .getCompound("body").put("HEAD_MINING_SPEED", new net.minecraft.nbt.CompoundTag());
         var wrong = (ItemStack) lookup.invoke(drill, wrongProperty);
         helper.assertTrue(wrong.getCount() == 20 && SettingsNbt.read(wrong.getTag(), "pneumaticcraft:pressure_chamber_valve") == null,
             "Extra property on blank was laundered into rated valve");
@@ -140,14 +154,17 @@ public final class Wave2PneuMechanicsValveTests {
         var drillLookup = AssemblyDrillBlockEntity.class.getDeclaredMethod("getDrilledOutputForItem", ItemStack.class);
         var laserLookup = AssemblyLaserBlockEntity.class.getDeclaredMethod("getLaseredOutputForItem", ItemStack.class);
         drillLookup.setAccessible(true); laserLookup.setAccessible(true);
-        var valves = (ItemStack) drillLookup.invoke(drill, blank(helper, "tconstruct:wood#oak", false));
+        var valves = (ItemStack) drillLookup.invoke(drill, blank(helper, "tconstruct:flint", false));
         helper.assertTrue(valves.getCount() == 20 && laserAssembly.matches(valves), "Rated valves lost native laser eligibility");
         var tubes = (ItemStack) laserLookup.invoke(laser, valves);
         var settings = SettingsNbt.read(tubes.getTag(), "pneumaticcraft:advanced_pressure_tube");
         helper.assertTrue(tubes.getCount() == 8 && settings != null && settings.properties().get("pressure_envelope") == .75,
             "Native laser did not carry consumed valve construction into eight tubes");
         var invalid = valves.copy();
-        invalid.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("properties").putDouble("pressure_envelope", 1.5);
+        // The native drill has already inherited the blank's vetted final
+        // pressure into components.source; the valve has no raw part evidence.
+        invalid.getOrCreateTag().getCompound(SettingsNbt.KEY).getCompound("components")
+            .getCompound("source").putDouble("pressure_envelope", 1.5);
         var fallback = (ItemStack) laserLookup.invoke(laser, invalid);
         helper.assertTrue(fallback.getCount() == 8 && SettingsNbt.read(fallback.getTag(), "pneumaticcraft:advanced_pressure_tube") == null,
             "Invalid valve pressure laundered into advanced tube");
@@ -180,8 +197,7 @@ public final class Wave2PneuMechanicsValveTests {
         helper.assertTrue(output.getStackInSlot(0).isEmpty() && inputs.getStackInSlot(0).isEmpty(),
             "Thermo plant started with unexpected inventory");
         var wood = item("pneumaticcraft:pressure_tube");
-        SettingsNbt.write(wood.getOrCreateTag(), new MachineSettings("pneumaticcraft:pressure_tube",
-            Map.of("pressure_envelope", .75), Map.of("body", "tconstruct:wood#oak"), null));
+        SettingsNbt.write(wood.getOrCreateTag(), tubeSettings(.75, "tconstruct:wood#oak"));
         inputs.setStackInSlot(0, wood); // Exactly the final one-item input.
         helper.assertTrue(plant.getInputTank().fill(new FluidStack(plastic, 50), FluidAction.EXECUTE) == 50,
             "Real native plastic tank rejected recipe cost");
@@ -197,8 +213,7 @@ public final class Wave2PneuMechanicsValveTests {
             && inputs.getStackInSlot(0).isEmpty() && plant.getInputTank().getFluidAmount() == 0,
             "Last input lost metadata or native 50 mB/item consumption was bypassed");
         var iron = item("pneumaticcraft:pressure_tube");
-        SettingsNbt.write(iron.getOrCreateTag(), new MachineSettings("pneumaticcraft:pressure_tube",
-            Map.of("pressure_envelope", 1.0), Map.of("body", "tconstruct:iron"), null));
+        SettingsNbt.write(iron.getOrCreateTag(), tubeSettings(1, "tconstruct:iron"));
         inputs.setStackInSlot(0, iron);
         helper.assertTrue(plant.getInputTank().fill(new FluidStack(plastic, 50), FluidAction.EXECUTE) == 50,
             "Native plastic tank rejected blocked-output cost setup");

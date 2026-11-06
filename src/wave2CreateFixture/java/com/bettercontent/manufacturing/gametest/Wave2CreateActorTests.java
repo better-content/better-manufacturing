@@ -3,6 +3,7 @@ package com.bettercontent.manufacturing.gametest;
 import com.bettercontent.manufacturing.ManufacturingMod;
 import com.bettercontent.manufacturing.integration.createactors.CreateActorsPartSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.simibubi.create.content.contraptions.actors.plough.PloughMovementBehaviour;
 import com.simibubi.create.content.contraptions.actors.roller.RollerMovementBehaviour;
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
@@ -54,9 +55,16 @@ public final class Wave2CreateActorTests {
             String function = id.endsWith("plough") ? "better_manufacturing:create/field_work" : "better_manufacturing:create/rolling";
             String partId = id.endsWith("plough") ? "tconstruct:small_axe_head" : "tconstruct:large_plate";
             Object movement = id.endsWith("plough") ? new PloughMovementBehaviour() : new RollerMovementBehaviour();
-            var cheap = CreateActorsPartSettings.bake(id, function, Map.of("working_surface", part(partId, "tconstruct:wood#oak")));
-            var iron = CreateActorsPartSettings.bake(id, function, Map.of("working_surface", part(partId, "tconstruct:iron")));
-            helper.assertTrue(cheap.rate() < iron.rate() && iron.rate() == 1, "Pack-supported cheap native material did not alter rated breaking work");
+            // Pack wood has no head; pinned slimewood has an eligible head speed 4
+            // versus iron 6, clamped to the native 0.75 working-rate floor.
+            var cheapPart = part(partId, "tconstruct:slimewood");
+            var ironPart = part(partId, "tconstruct:iron");
+            var cheap = NativePartCapture.bake(function, Map.of("working_surface", cheapPart),
+                () -> CreateActorsPartSettings.bake(id, function, Map.of("working_surface", cheapPart)));
+            var iron = NativePartCapture.bake(function, Map.of("working_surface", ironPart),
+                () -> CreateActorsPartSettings.bake(id, function, Map.of("working_surface", ironPart)));
+            helper.assertTrue(Math.abs(cheap.rate() - .75) < 1e-6 && iron.rate() == 1,
+                "Eligible native head contrast did not preserve bounded breaking work");
             var cheapTag = new CompoundTag(); SettingsNbt.write(cheapTag, cheap);
             var ironTag = new CompoundTag(); SettingsNbt.write(ironTag, iron);
             float slower = nativeBreakingSpeed(helper, movement, id, cheapTag);

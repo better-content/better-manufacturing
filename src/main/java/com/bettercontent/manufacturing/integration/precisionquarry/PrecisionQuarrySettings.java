@@ -2,6 +2,8 @@ package com.bettercontent.manufacturing.integration.precisionquarry;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -42,11 +44,15 @@ public final class PrecisionQuarrySettings {
         float baseline = function.equals("better_manufacturing:rats/quarry_work") ? iron.miningSpeed() : iron.attack();
         if (!Float.isFinite(value) || value <= 0 || !Float.isFinite(baseline) || baseline <= 0)
             throw new IllegalArgumentException("Invalid native working head stats");
+        NativePartCapture.record(stack, function.equals("better_manufacturing:rats/quarry_work")
+            ? NativePartRates.Measure.HEAD_MINING_SPEED : NativePartRates.Measure.HEAD_ATTACK, value, baseline);
         double rate = Math.max(.75, Math.min(1.5, value / baseline));
         boolean rat = function.equals("better_manufacturing:rats/quarry_work");
         var tier = rat ? TierSortingRegistry.getName(head.tier()) : null;
         if (rat && tier == null) throw new IllegalArgumentException("Unknown harvest tier");
         // Hardness is meaningful for a mining rat, not the quarry's platform-building radius.
+        if (rat && output.equals("rats:rat_upgrade_quarry"))
+            NativePartCapture.recordAuxiliary("native_head", "hardness_limit", head.tier().getLevel());
         var properties = rat && output.equals("rats:rat_upgrade_quarry")
             ? Map.of("work_rate", rate, "hardness_limit", (double) head.tier().getLevel())
             : Map.of("work_rate", rate);

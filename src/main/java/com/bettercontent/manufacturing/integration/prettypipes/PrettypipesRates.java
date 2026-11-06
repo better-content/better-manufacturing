@@ -15,26 +15,12 @@ public final class PrettypipesRates {
         return id == null ? null : SettingsNbt.read(stack.getTag(), id.toString());
     }
 
-    /** Existing saved v1 module stacks used a universal medium-tier reference (15 ticks,
-     * 0.1 speed bonus). Recover only their bounded material ratio; always apply that ratio
-     * to the *installed item's* real native tier, not the old absolute values.
-     */
     private static double extractionRate(MachineSettings settings) {
-        if (settings == null) return Double.NaN;
-        var properties = settings.properties();
-        if (properties.containsKey("extraction_rate")) return properties.get("extraction_rate");
-        double legacyInterval = properties.getOrDefault("extraction_interval", Double.NaN);
-        return Double.isFinite(legacyInterval) && legacyInterval >= 10 && legacyInterval <= 20
-            && legacyInterval == Math.rint(legacyInterval) ? 15d / legacyInterval : Double.NaN;
+        return settings == null ? Double.NaN : settings.properties().getOrDefault("extraction_rate", Double.NaN);
     }
 
     private static double speedRate(MachineSettings settings) {
-        if (settings == null) return Double.NaN;
-        var properties = settings.properties();
-        if (properties.containsKey("speed_rate")) return properties.get("speed_rate");
-        double legacyBonus = properties.getOrDefault("speed_bonus", Double.NaN);
-        return Double.isFinite(legacyBonus) && legacyBonus >= .05 && legacyBonus <= .2
-            ? legacyBonus / .1d : Double.NaN;
+        return settings == null ? Double.NaN : settings.properties().getOrDefault("speed_rate", Double.NaN);
     }
 
     private static boolean boundedRate(double rate) {

@@ -31,7 +31,7 @@ public final class KineticVariantBehaviour extends BlockEntityBehaviour {
             }
         }
         settings = SettingsNbt.read(tag, outputId());
-        // A valid v1 envelope for another machine must never adjust this machine's native work.
+        // A decoded record for another machine must never adjust this machine's native work.
         // Keep the original tag for drops and schematics; only its runtime interpretation falls back.
         var required = switch (outputId()) {
             case "create:encased_fan" -> java.util.Set.of("airflow");

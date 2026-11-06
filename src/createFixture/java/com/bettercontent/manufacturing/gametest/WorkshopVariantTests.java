@@ -26,7 +26,10 @@ public final class WorkshopVariantTests {
         // native IDs for these four roots. The no-script core profile retains them.
         String legacy="create:crafting/kinetics/"+name;
         String expected=net.minecraftforge.fml.ModList.get().isLoaded("kubejs") ? switch(name) {
-            case "millstone", "mechanical_press", "mechanical_pump" -> "kubejs:powered_works/direct_root/"+name;
+            case "millstone", "mechanical_press" -> "kubejs:powered_works/direct_root/"+name;
+            // The pump retains its part-consuming native datapack ID; production20
+            // deliberately does not author a second direct-root recipe.
+            case "basin", "whisk", "propeller" -> "kubejs:powered_works/workshop/"+name;
             case "mechanical_mixer" -> "kubejs:powered_works/mechanical_mixer";
             default -> legacy;
         } : legacy;
@@ -50,7 +53,9 @@ public final class WorkshopVariantTests {
     @GameTest(template="drill_workshop")
     public static void pumpUsesBakedPressureAndNativeNetwork(GameTestHelper helper) {
         for (int i=0;i<2;i++) {
-            var part = craft(helper,"mechanical_pump",i==0?"tconstruct:wood":"tconstruct:iron");
+            // Native copper handle durability is -0.2 versus iron's +0.1; their
+            // physical .727 ratio clamps to the existing .75 pressure/stress bound.
+            var part = craft(helper,"mechanical_pump",i==0?"tconstruct:copper":"tconstruct:iron");
             var relative = new BlockPos(2+i*5,2,2);
             var placed = ((BlockItem)part.getItem()).place(new DirectionalPlaceContext(helper.getLevel(),helper.absolutePos(relative),Direction.WEST,part.copy(),Direction.UP));
             helper.assertTrue(placed.consumesAction(),"Pump placement failed");
@@ -89,16 +94,22 @@ public final class WorkshopVariantTests {
     public static void workshopSettingsDriveNativeWorkAndSurvivePickup(GameTestHelper helper) {
         String[] names={"mechanical_saw","millstone","mechanical_press","mechanical_mixer","encased_fan"};
         for(String name:new String[]{"mechanical_saw","millstone","mechanical_press","encased_fan"}) craft(helper,name,"tconstruct:rock#stone");
-        craft(helper,"mechanical_mixer","tconstruct:wood#oak");
+        craft(helper,"mechanical_mixer","tconstruct:slimewood");
         for(int index=0;index<names.length;index++) {
             double[] progress=new double[2],stress=new double[2];
             for(int choice=0;choice<2;choice++) {
-                String material=choice==1?"tconstruct:iron":index==0||index==3?"tconstruct:wood":"tconstruct:copper";
+                // A wood handle has iron's same native mining-speed modifier (0);
+                // slimewood's -0.15 gives the mixer a real slower handle contrast.
+                // Pack TCon explicitly disables wood heads; native rock head speed 4
+                // contrasts with iron's 6 on the saw without fabricating a rating.
+                String material=choice==1?"tconstruct:iron":index==0?"tconstruct:rock#stone":index==3?"tconstruct:slimewood":"tconstruct:copper";
                 var item=craft(helper,names[index],material); var pos=helper.absolutePos(new BlockPos(2+index*3,3,2+choice*4));
                 var result=((BlockItem)item.getItem()).place(new DirectionalPlaceContext(helper.getLevel(),pos,Direction.WEST,item.copy(),Direction.UP));
                 helper.assertTrue(result.consumesAction(),"Workshop placement failed");
                 var block=(KineticBlockEntity)helper.getLevel().getBlockEntity(pos); var variant=KineticVariantBehaviour.get(block);
-                helper.assertTrue(variant!=null && variant.settings()!=null && (choice==1?variant.rate()==1:variant.rate()<1),"Workshop settings were not installed");
+                helper.assertTrue(variant!=null && variant.settings()!=null && (choice==1?variant.rate()==1:variant.rate()<1),
+                    "Workshop settings were not installed: " + names[index] + " material=" + material
+                        + " rate=" + (variant == null ? "no behaviour" : variant.rate()));
                 var loaded=block.getType().create(pos,block.getBlockState()); loaded.setLevel(helper.getLevel()); loaded.load(block.saveWithFullMetadata());
                 helper.assertTrue(KineticVariantBehaviour.get(loaded).settings().equals(variant.settings()),"Workshop save/load lost settings");
                 var drops=Block.getDrops(block.getBlockState(),helper.getLevel(),pos,block);

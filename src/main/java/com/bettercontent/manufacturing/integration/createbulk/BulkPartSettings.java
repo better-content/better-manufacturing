@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-/** Native tool-part stats are read once at craft; installed machines use only final baked values. */
+/** Native tool-part stats are sampled at craft; installed machines derive responses from saved inputs. */
 public final class BulkPartSettings {
     public static final String WHEEL = "better_manufacturing:createbulk/crushing_wheel";
     public static final String LAUNCHER = "better_manufacturing:createbulk/weighted_ejector";

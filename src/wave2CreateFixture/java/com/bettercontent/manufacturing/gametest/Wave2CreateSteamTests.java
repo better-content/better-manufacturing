@@ -4,6 +4,7 @@ import com.bettercontent.manufacturing.ManufacturingMod;
 import com.bettercontent.manufacturing.integration.createbulk.BulkPartSettings;
 import com.bettercontent.manufacturing.integration.createbulk.SteamVariantBehaviour;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.api.boiler.BoilerHeater;
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
@@ -38,6 +39,9 @@ import java.util.Map;
 @GameTestHolder(ManufacturingMod.ID)
 @PrefixGameTestTemplate(false)
 public final class Wave2CreateSteamTests {
+    // Pinned native TCon wood handle durability 0 / iron +0.1; the shaft
+    // capacity follows that same-stat mechanical-limit ratio, not .75.
+    private static final double NATIVE_WOOD_SHAFT_LIMIT = 1d / 1.1;
     private Wave2CreateSteamTests() {}
 
     @GameTest(template = "drill_workshop", timeoutTicks = 100)
@@ -69,11 +73,18 @@ public final class Wave2CreateSteamTests {
             helper.assertTrue(engine.getTank() != null && engine.getShaft() == shaft,
                 "Native steam engine did not connect to its tank and powered shaft");
             helper.assertTrue(shaft.calculateAddedStressCapacity() == 0, "Unpowered steam shaft generated free capacity");
+            // A manual half-efficiency supply is below either material's ceiling.
+            // The real heated/water-fed case below is what exercises that ceiling.
+            shaft.update(engine.getBlockPos(), 0, .5f);
+            double nativeHalfSupply = shaft.calculateAddedStressCapacity();
+            helper.assertTrue(nativeHalfSupply > 0, "Native half-efficiency supply produced no shaft capacity");
+            shaft.update(engine.getBlockPos(), 0, 0);
             double[] capacity = new double[2];
             for (int i = 0; i < 2; i++) {
                 var material = i == 0 ? "tconstruct:wood#oak" : "tconstruct:iron";
                 var part = ((ToolPartItem) handle).withMaterial(MaterialVariantId.parse(material));
-                var settings = BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part));
+                var settings = NativePartCapture.bake(BulkPartSettings.STEAM, Map.of("piston_rod", part),
+                    () -> BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part)));
                 var stack = AllBlocks.STEAM_ENGINE.asStack(); SettingsNbt.write(stack.getOrCreateTag(), settings);
                 variant.install(stack.getTag());
                 helper.assertTrue(settings.equals(variant.settings()), "Engine did not install crafted fixed settings");
@@ -89,8 +100,10 @@ public final class Wave2CreateSteamTests {
                 helper.assertTrue(drops.size() == 1 && net.minecraft.world.item.ItemStack.isSameItemSameTags(stack, drops.get(0)),
                     "Native steam engine drop lost its fixed setting");
             }
-            helper.assertTrue(capacity[0] < capacity[1] && Math.abs(capacity[0] / capacity[1] - .75) < .01,
-                "Rated native steam shaft ignored material or created capacity for free");
+            helper.assertTrue(Math.abs(capacity[0] - nativeHalfSupply) < .01
+                    && Math.abs(capacity[1] - nativeHalfSupply) < .01,
+                "Low native supply gained capacity from a material ceiling that was not reached: native="
+                    + nativeHalfSupply + " wood=" + capacity[0] + " iron=" + capacity[1]);
             shaft.update(engine.getBlockPos(), 0, 0);
             helper.assertTrue(shaft.calculateAddedStressCapacity() == 0, "Engine still generated stress with native supply removed");
             helper.succeed();
@@ -173,7 +186,8 @@ public final class Wave2CreateSteamTests {
                 && Math.abs(shaft[0].getGeneratedSpeed()) > 0,
                 "Actual operating boiler failed to drive native shaft and stress capacity");
             var part = ((ToolPartItem) handle).withMaterial(MaterialVariantId.parse("tconstruct:wood#oak"));
-            var wood = BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part));
+            var wood = NativePartCapture.bake(BulkPartSettings.STEAM, Map.of("piston_rod", part),
+                () -> BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part)));
             var tag = new CompoundTag(); SettingsNbt.write(tag, wood);
             SteamVariantBehaviour.get(engine[0]).install(tag);
             helper.assertTrue(wood.equals(SteamVariantBehaviour.get(engine[0]).settings()),
@@ -184,14 +198,16 @@ public final class Wave2CreateSteamTests {
             helper.assertTrue(capacity[0] > 0 && shaft[0].engineEfficiency > 0,
                 "Wood engine did not produce native heat-and-water-funded stress capacity");
             var part = ((ToolPartItem) handle).withMaterial(MaterialVariantId.parse("tconstruct:iron"));
-            var iron = BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part));
+            var iron = NativePartCapture.bake(BulkPartSettings.STEAM, Map.of("piston_rod", part),
+                () -> BulkPartSettings.bake("create:steam_engine", BulkPartSettings.STEAM, Map.of("piston_rod", part)));
             var tag = new CompoundTag(); SettingsNbt.write(tag, iron);
             SteamVariantBehaviour.get(engine[0]).install(tag);
         });
         helper.runAtTickTime(52, () -> {
             capacity[1] = shaft[0].calculateAddedStressCapacity();
-            helper.assertTrue(capacity[1] > capacity[0] && Math.abs(capacity[0] / capacity[1] - .75) < .01,
-                "Operating boiler lost real wood/iron 0.75 engine budget: wood="
+            helper.assertTrue(capacity[1] > capacity[0]
+                    && Math.abs(capacity[0] / capacity[1] - NATIVE_WOOD_SHAFT_LIMIT) < .01,
+                "Operating boiler lost real wood/iron native handle budget: wood="
                     + capacity[0] + " iron=" + capacity[1]);
             var saved = engine[0].saveWithFullMetadata();
             engine[0].load(saved);

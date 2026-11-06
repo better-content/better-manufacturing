@@ -1,6 +1,7 @@
 package com.bettercontent.manufacturing.integration.trackwork;
 
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.google.gson.JsonObject;
 import com.simibubi.create.content.kinetics.crafter.MechanicalCraftingRecipe;
 import net.minecraft.core.RegistryAccess;
@@ -39,8 +40,11 @@ public final class TrackworkMechanicalRecipe extends MechanicalCraftingRecipe {
             }
         }
         if (!hub.isEmpty()) {
-            try { SettingsNbt.write(result.getOrCreateTag(), TrackworkSettings.bake(
-                String.valueOf(ForgeRegistries.ITEMS.getKey(result.getItem())), TrackworkSettings.FUNCTION, Map.of("hub_suspension", hub)));
+            ItemStack selectedHub = hub;
+            String outputId = String.valueOf(ForgeRegistries.ITEMS.getKey(result.getItem()));
+            var inputs = Map.of("hub_suspension", selectedHub);
+            try { SettingsNbt.write(result.getOrCreateTag(), NativePartCapture.bake(TrackworkSettings.FUNCTION, inputs,
+                () -> TrackworkSettings.bake(outputId, TrackworkSettings.FUNCTION, inputs)));
             } catch (IllegalArgumentException | java.util.NoSuchElementException invalid) { return ItemStack.EMPTY; }
         } else return ItemStack.EMPTY;
         return result;

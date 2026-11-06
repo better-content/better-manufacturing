@@ -58,7 +58,8 @@ def validate(selection, ledger, workspace):
     if not isinstance(records, dict): return errors + ['invalid implementation entries']
     selected = {e['id']: e for e in selection['entries'] if e['disposition'] != 'excluded'}
     for entry in selection['entries']:
-        if entry['disposition'] != 'excluded' or entry.get('exclusion_reason') == 'user_deferred_unconfirmed_identity': continue
+        if entry['disposition'] != 'excluded' or entry.get('exclusion_reason') in {
+                'user_deferred_unconfirmed_identity', 'user_deferred_closed_acquisition'}: continue
         try:
             if entry.get('exclusion_reason') not in selection.get('excluded_families', []): raise ValueError('not an approved exclusion')
             for kind in ['source_evidence', 'policy_evidence']:

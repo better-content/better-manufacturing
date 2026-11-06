@@ -15,7 +15,6 @@ import org.patryk3211.powergrid.kinetics.servo.ServoBlockEntity;
 import org.patryk3211.powergrid.kinetics.generator.inductionrotor.InductionRotorBlockEntity;
 import org.patryk3211.powergrid.kinetics.generator.clutch.GeneratorClutchBlockEntity;
 import org.patryk3211.powergrid.kinetics.generator.winding.WindingBlockEntity;
-import java.util.Map;
 import java.util.Set;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -79,9 +78,14 @@ public final class PowergridRatings {
         double rating = settings.properties().getOrDefault("generator_ratio", 1d);
         return Double.isFinite(rating) && rating >= .75 && rating <= 1.5 ? rating : 1;
     }
-    public static void installWinding(BlockEntity block, double rating) {
-        if (!(block instanceof WindingBlockEntity winding) || !Double.isFinite(rating) || rating < .75 || rating > 1.5) return;
-        SettingsNbt.write(block.getPersistentData(), new MachineSettings("powergrid:copper_coil", Map.of("generator_ratio", rating), Map.of(), null));
+    public static void installWinding(BlockEntity block, ItemStack consumedCoil) {
+        if (!(block instanceof WindingBlockEntity winding) || consumedCoil.isEmpty()) return;
+        var coilId = ForgeRegistries.ITEMS.getKey(consumedCoil.getItem());
+        if (coilId == null || !coilId.toString().equals("powergrid:copper_coil")) return;
+        var settings = SettingsNbt.read(consumedCoil.getTag(), coilId.toString());
+        if (settings != null && settings.properties().keySet().equals(Set.of("generator_ratio")))
+            SettingsNbt.write(block.getPersistentData(), settings);
+        else block.getPersistentData().remove(SettingsNbt.KEY); // A stock/replaced coil must not retain the prior coil's rating.
         winding.setChanged();
         // The owner schedules its native series/parallel graph recalculation on the next tick.
         winding.onNeighborChanged(winding.getBlockPos());

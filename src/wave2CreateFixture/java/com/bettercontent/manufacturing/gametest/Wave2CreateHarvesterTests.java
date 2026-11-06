@@ -40,9 +40,16 @@ public final class Wave2CreateHarvesterTests {
             grid.setItem(i % shaped.getWidth() + i / shaped.getWidth() * 3, candidates[0].copy());
         }
         var blade = ForgeRegistries.ITEMS.getValue(new ResourceLocation("tconstruct:small_blade"));
-        helper.assertTrue(blade instanceof ToolPartItem && grid.getItem(1).is(blade),
+        // The effective APA/AIA/BC_ shape puts pollen at index 1 and the
+        // construction blade at index 6, not in the top-center pollen slot.
+        helper.assertTrue(blade instanceof ToolPartItem && grid.getItem(6).is(blade),
             "Harvester lost its consumed native small blade");
-        grid.setItem(1, ((ToolPartItem) blade).withMaterial(MaterialVariantId.parse("tconstruct:wood#oak")));
+        // Pack wood has no native head for this blade; use an actual eligible
+        // pinned slimewood head, without inventing an instantaneous work rate.
+        var material = MaterialVariantId.parse("tconstruct:slimewood");
+        helper.assertTrue(((ToolPartItem) blade).canUseMaterial(material.getId()),
+            "Harvester construction blade has no native head role");
+        grid.setItem(6, ((ToolPartItem) blade).withMaterial(material));
         var result = shaped.assemble(grid, helper.getLevel().registryAccess());
         helper.assertTrue(result.is(AllBlocks.MECHANICAL_HARVESTER.asItem())
                 && SettingsNbt.read(result.getTag(), "create:mechanical_harvester") == null,

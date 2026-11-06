@@ -1,6 +1,7 @@
 package com.bettercontent.manufacturing.integration.createbulk;
 
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.google.gson.JsonObject;
 import com.simibubi.create.content.kinetics.crafter.MechanicalCraftingRecipe;
 import net.minecraft.core.RegistryAccess;
@@ -46,7 +47,8 @@ public final class BulkWheelRecipe extends MechanicalCraftingRecipe {
             var id = ForgeRegistries.ITEMS.getKey(output.getItem());
             if (id == null || output.getCount() != 2) return ItemStack.EMPTY;
             try {
-                SettingsNbt.write(output.getOrCreateTag(), BulkPartSettings.bake(id.toString(), function, inputs));
+                SettingsNbt.write(output.getOrCreateTag(), NativePartCapture.bake(function, inputs,
+                    () -> BulkPartSettings.bake(id.toString(), function, inputs)));
                 return output;
             } catch (IllegalArgumentException invalid) { return ItemStack.EMPTY; }
         }

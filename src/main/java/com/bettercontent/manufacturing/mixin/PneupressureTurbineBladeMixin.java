@@ -3,6 +3,7 @@ package com.bettercontent.manufacturing.mixin;
 import com.bettercontent.manufacturing.integration.pneupressure.PneupressureSettings;
 import com.bettercontent.manufacturing.api.MachineSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import it.unimi.dsi.fastutil.ints.IntList;
 import me.desht.pneumaticcraft.common.recipes.machine.PressureChamberRecipeImpl;
 import net.minecraft.core.NonNullList;
@@ -33,7 +34,8 @@ public abstract class PneupressureTurbineBladeMixin {
             if (id.toString().equals("tconstruct:tough_handle")) inputs.put("handle", stack.copy());
         }
         if (inputs.size() == 2) {
-            try { pneupressure$blade.set(PneupressureSettings.bake("pneumaticcraft:turbine_blade", PneupressureSettings.ROTATION, inputs)); }
+            try { pneupressure$blade.set(NativePartCapture.bake(PneupressureSettings.ROTATION, inputs,
+                () -> PneupressureSettings.bake("pneumaticcraft:turbine_blade", PneupressureSettings.ROTATION, inputs))); }
             catch (IllegalArgumentException unsupported) { /* Native pressure chamber still decides eligibility. */ }
         }
     }

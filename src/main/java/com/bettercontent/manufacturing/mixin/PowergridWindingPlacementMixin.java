@@ -86,7 +86,7 @@ public abstract class PowergridWindingPlacementMixin {
         if (original.toString().equals("powergrid:winding")) {
             BlockPos added = before.clicked().relative(before.side());
             if (isWinding(level.getBlockState(added))) PowergridRatings.installWinding(level.getBlockEntity(added),
-                PowergridRatings.coilRatio(before.held()));
+                before.held());
             return;
         }
         if (!original.toString().equals("create:shaft") || before.first() == null) return;
@@ -95,7 +95,7 @@ public abstract class PowergridWindingPlacementMixin {
         int delta = org.patryk3211.powergrid.kinetics.generator.winding.WindingItem.getPlacementDelta(before.clicked(), first);
         int size = Math.abs(delta) + 1;
         BlockPos start = delta > 0 ? first : before.clicked();
-        var consumedCoils = new ArrayList<Double>(size);
+        var consumedCoils = new ArrayList<ItemStack>(size);
         Player player = context.getPlayer();
         if (player != null && before.inventory() != null) {
             var contents = player.getInventory();
@@ -103,11 +103,11 @@ public abstract class PowergridWindingPlacementMixin {
                 ItemStack old = before.inventory()[i], now = contents.getItem(i);
                 if (old.isEmpty() || old.getItem() != before.held().getItem()) continue;
                 int used = Math.max(0, old.getCount() - (now.getItem() == old.getItem() ? now.getCount() : 0));
-                for (int j = 0; j < used && consumedCoils.size() < size; j++) consumedCoils.add(PowergridRatings.coilRatio(old));
+                for (int j = 0; j < used && consumedCoils.size() < size; j++) consumedCoils.add(old);
             }
         }
         // Creative/dispenser contexts consume the held stack directly; vanilla inventory removal above is untouched.
-        while (consumedCoils.size() < size) consumedCoils.add(PowergridRatings.coilRatio(before.held()));
+        while (consumedCoils.size() < size) consumedCoils.add(before.held());
         for (int i = 0; i < size; i++) {
             BlockPos part = start.relative(axis, i);
             if (isWinding(level.getBlockState(part))) PowergridRatings.installWinding(level.getBlockEntity(part), consumedCoils.get(i));

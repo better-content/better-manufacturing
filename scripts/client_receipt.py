@@ -9,7 +9,7 @@ from source_identity import fingerprint
 root, fixture = (Path(value).resolve() for value in sys.argv[1:])
 if not fixture.is_relative_to(root / 'build/client-fixture'): raise SystemExit('Not an isolated client fixture')
 witness = json.loads((fixture / 'client-witness.json').read_text())
-if witness.get('status') != 'passed' or witness.get('pack_runtime_accepted') is not False or witness.get('scope') != 'isolated_userdev_drill_sifter_client':
+if witness.get('status') != 'passed' or witness.get('pack_runtime_accepted') is not False or witness.get('scope') != 'isolated_userdev_v2_drill_sifter_client':
     raise SystemExit('Missing or invalid local-client witness')
 metadata = dict(line.split('=', 1) for line in (root / 'build/resources/main/META-INF/better-content-source.properties').read_text().splitlines())
 current = fingerprint(root)
@@ -25,7 +25,7 @@ deps = [{'artifact': Path(name).name, 'sha256': sha(Path(name))} for name in (fi
 output = fixture / 'execution.json'
 if output.exists(): raise SystemExit('Refusing to overwrite client evidence')
 output.write_text(json.dumps({'schema': 'better_manufacturing.client_fixture.v1', 'status': 'passed',
-    'scope': 'isolated_userdev_drill_sifter_client', 'full_roster_accepted': False, 'pack_runtime_accepted': False,
+    'scope': 'isolated_userdev_v2_drill_sifter_client', 'full_roster_accepted': False, 'pack_runtime_accepted': False,
     'visual_review_required': True, 'production_fingerprint': current, 'compiled_inputs': inputs,
     'runtime_dependencies': deps, 'screenshots': images, 'witness_sha256': sha(fixture / 'client-witness.json'),
     'log_sha256': sha(fixture / 'logs/latest.log'), 'world_input_sha256': sha(fixture / 'client-input.json'),

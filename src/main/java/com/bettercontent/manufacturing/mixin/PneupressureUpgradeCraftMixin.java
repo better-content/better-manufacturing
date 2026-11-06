@@ -37,7 +37,7 @@ public abstract class PneupressureUpgradeCraftMixin {
             if (!Double.isFinite(rate) || rate < .75 || rate > 1.5
                 || !Double.isFinite(envelope) || envelope < .75 || envelope > 1) return;
             // Same physical working parts are upgraded, not replaced. NBT output identity is rewritten.
-            SettingsNbt.write(output.getOrCreateTag(), new MachineSettings(outputId.toString(), settings.properties(), settings.materials(), null));
+            SettingsNbt.write(output.getOrCreateTag(), SettingsNbt.inheritCompressor(outputId.toString(), settings));
             return;
         }
     }

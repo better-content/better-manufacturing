@@ -109,10 +109,13 @@ public final class Wave2PneuProcessMeshTests {
             .orElseThrow(() -> new AssertionError("Native CC sequenced assembly absent"));
         helper.assertTrue(nativeRecipe instanceof SequencedAssemblyRecipe
             && ((SequencedAssemblyRecipe) nativeRecipe).getLoops() == 8, "Native eight-loop recipe changed");
-        for (String material : List.of("tconstruct:wood", "tconstruct:iron")) {
+        // Pack wood lacks head stats for the broad blade. Pinned slimewood has
+        // eligible blade speed 4 vs iron 6 and handle speed -.15 vs iron 0;
+        // the weaker blade clamps the native mesh airflow proxy to 0.75.
+        for (String material : List.of("tconstruct:slimewood", "tconstruct:iron")) {
             var input = woven(helper, material);
-            double expected = material.equals("tconstruct:wood") ? .75 : 1;
-            helper.assertTrue(Math.abs(airflow(helper, input) - expected) < .001, "Cheap pack material failed to affect mesh");
+            double expected = material.equals("tconstruct:slimewood") ? .75 : 1;
+            helper.assertTrue(Math.abs(airflow(helper, input) - expected) < .001, "Eligible native parts failed to affect mesh");
             for (int stage = 1; stage <= 8; stage++) {
                 input = nativeWaterStage(helper, input, stage);
                 helper.assertTrue(Math.abs(airflow(helper, input) - expected) < .001, "Baked setting lost at native stage " + stage);
@@ -134,11 +137,8 @@ public final class Wave2PneuProcessMeshTests {
         var first = nativeWaterStage(helper, ordinary, 1);
         helper.assertTrue(!first.getTag().contains(SettingsNbt.KEY) && first.getTag().getCompound("SequencedAssembly").getInt("Step") == 1,
             "Native unconfigured input acquired fake settings");
-        var wrong = woven(helper, "tconstruct:wood");
-        var wrongTag = wrong.getTag().copy();
-        var wanted = SettingsNbt.read(wrongTag, "compressedcreativity:mesh_woven");
-        SettingsNbt.write(wrong.getOrCreateTag(), new com.bettercontent.manufacturing.api.MachineSettings(
-            "compressedcreativity:mesh_dense", wanted.properties(), wanted.materials(), null));
+        var wrong = woven(helper, "tconstruct:slimewood");
+        wrong.getTag().getCompound(SettingsNbt.KEY).putString("output", "compressedcreativity:mesh_dense");
         helper.assertTrue(!nativeWaterStage(helper, wrong, 1).getTag().contains(SettingsNbt.KEY),
             "Wrong-output settings were transferred across native sequence");
         helper.succeed();

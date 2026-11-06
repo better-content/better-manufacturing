@@ -49,7 +49,7 @@ public final class Wave2CreateWhiskTests {
     public static void effectiveMixerInheritsConsumedWhiskWithoutExtraHandle(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("create") && ModList.get().isLoaded("tconstruct"),
             "Real Create and TConstruct dependencies are required");
-        var whiskRecipe = required(helper, "create:crafting/kinetics/whisk");
+        var whiskRecipe = required(helper, "kubejs:powered_works/workshop/whisk");
         var mixerRecipe = required(helper, "kubejs:powered_works/mechanical_mixer");
         helper.assertTrue(whiskRecipe.parts().size() == 1 && whiskRecipe.parts().get(0).slot() == 1,
             "Whisk's native handle role changed");
@@ -60,7 +60,9 @@ public final class Wave2CreateWhiskTests {
         double[] rates = new double[2];
         for (int choice = 0; choice < 2; choice++) {
             var whiskGrid = grid(whiskRecipe);
-            whiskGrid.setItem(1, handle.withMaterial(MaterialVariantId.parse(choice == 0 ? "tconstruct:wood#oak" : "tconstruct:iron")));
+            // Wood and iron handles have the same native mining-speed modifier; slimewood
+            // has a real -0.15 modifier, giving a paid contrasting whisk.
+            whiskGrid.setItem(1, handle.withMaterial(MaterialVariantId.parse(choice == 0 ? "tconstruct:slimewood" : "tconstruct:iron")));
             var whisk = whiskRecipe.assemble(whiskGrid, helper.getLevel().registryAccess());
             var whiskSettings = SettingsNbt.read(whisk.getTag(), "create:whisk");
             helper.assertTrue(whiskSettings != null, "Configured native whisk did not craft");
@@ -72,7 +74,7 @@ public final class Wave2CreateWhiskTests {
             helper.assertTrue(mixerSettings != null && mixerSettings.rate() == whiskSettings.rate(),
                 "Mixer failed to inherit its consumed whisk's fixed rating");
             rates[choice] = mixerSettings.rate();
-            helper.assertTrue(mixerSettings.materials().containsValue(choice == 0 ? "tconstruct:wood#oak" : "tconstruct:iron"),
+            helper.assertTrue(mixerSettings.materials().containsValue(choice == 0 ? "tconstruct:slimewood" : "tconstruct:iron"),
                 "Mixer lost the configured native component label");
             // A native unconfigured predecessor stays usable as the ordinary baseline.
             mixerGrid.setItem(6, new ItemStack(whisk.getItem()));

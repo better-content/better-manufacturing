@@ -83,7 +83,9 @@ public final class Wave2PneuMechanicsTransferTests {
     @GameTest(template = "pneu_workshop")
     public static void tankTransferAndNativeContentsSurvivePlacementSaveAndDrop(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("pneumaticcraft") && ModList.get().isLoaded("tconstruct"), "Real PNCR/TCon runtime absent");
-        var wood = craft(helper, "small_tank", "tconstruct:wood#oak");
+        // Pack wood has no native head; slimewood's real 4/6 head speed
+        // produces the bounded .75 fitting rate against iron.
+        var wood = craft(helper, "small_tank", "tconstruct:slimewood");
         var iron = craft(helper, "small_tank", "tconstruct:iron");
         var cheap = SettingsNbt.read(wood.getTag(), "pneumaticcraft:small_tank");
         var base = SettingsNbt.read(iron.getTag(), "pneumaticcraft:small_tank");
@@ -120,7 +122,7 @@ public final class Wave2PneuMechanicsTransferTests {
     @GameTest(template = "pneu_workshop")
     public static void configuredEmptyTankTierChainKeepsNativeCapacitiesAndRejectsFilledInput(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("pneumaticcraft") && ModList.get().isLoaded("tconstruct"), "Actual PNCR/TCon required");
-        ItemStack prior = craft(helper, "small_tank", "tconstruct:wood#oak");
+        ItemStack prior = craft(helper, "small_tank", "tconstruct:slimewood");
         String[] names = {"small_tank", "medium_tank", "large_tank", "huge_tank"};
         int[] capacities = {32000, 64000, 128000, 512000};
         for (int tier = 0; tier < names.length; tier++) {

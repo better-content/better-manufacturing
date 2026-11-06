@@ -21,7 +21,7 @@ public final class CreateActorsMovementMixin {
             if (!((Object) this instanceof PloughMovementBehaviour)) return;
             var settings = context.blockEntityData == null ? null
                 : SettingsNbt.read(context.blockEntityData, "create:mechanical_plough");
-            // A valid v1 record for this output with another family's airflow or
+            // A record for this output with another family's airflow or
             // pressure is not a plough rating. Create already clamps to [1/128, 16];
             // a second minimum here would erase a paid sub-1x slowdown.
             if (settings != null && settings.properties().keySet().equals(java.util.Set.of("work_rate")))

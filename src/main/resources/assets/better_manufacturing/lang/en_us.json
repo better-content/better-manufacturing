@@ -41,6 +41,8 @@
   "better_manufacturing.emi.cutting": "Saved cutting rate: %s× iron reference",
   "better_manufacturing.emi.stress": "Saved rotational stress: %s× iron reference",
   "better_manufacturing.emi.tier": "Saved native head harvest tier",
+  "better_manufacturing.emi.generic": "Varies",
+  "better_manufacturing.emi.generic_explanation": "Generic recipe result. Actual settings are calculated from the consumed parts and shown on the crafted item's tooltip; parts can use different materials.",
   "better_manufacturing.mesh.blocked": "Sifting stopped: %s",
   "better_manufacturing.mesh.stock": "Unconfigured frame: native sifting baseline",
   "better_manufacturing.mesh.rate": "Saved sifting rate: %s× iron frame; native mesh recipes unchanged",

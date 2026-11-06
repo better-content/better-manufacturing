@@ -24,7 +24,7 @@ public final class DrillEngineering {
         return fromSettings(SettingsNbt.read(holder, output));
     }
     public static State fromSettings(com.bettercontent.manufacturing.api.MachineSettings settings) {
-        // A valid v1 record for another Create family must never become drill speed merely
+        // Another Create family's rating must never become drill speed merely
         // because MachineSettings.rate() can also read airflow/pressure as a convenience.
         if (settings == null || !CHASSIS.equals(settings.output())
             || !settings.properties().keySet().equals(java.util.Set.of("work_rate"))

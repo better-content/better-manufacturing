@@ -2,6 +2,8 @@ package com.bettercontent.manufacturing.integration.pneumatictools;
 
 import com.bettercontent.manufacturing.api.MachineSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.TierSortingRegistry;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -48,6 +50,7 @@ public final class PneumatictoolsSettings {
             throw new IllegalArgumentException("Invalid native cutting speed");
         var tier = TierSortingRegistry.getName(stats.tier());
         if (tier == null) throw new IllegalArgumentException("Unknown native harvest tier");
+        NativePartCapture.record(head, NativePartRates.Measure.HEAD_MINING_SPEED, speed, iron);
         double rate = Math.max(.75, Math.min(1.5, speed / iron));
         if (output.equals("pneumaticcraft:assembly_drill")) {
             // Each cylinder has already consumed its Tinkers blade/handle. The assembly drill

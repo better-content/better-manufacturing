@@ -13,6 +13,18 @@ public final class ManufacturingMod {
         com.bettercontent.manufacturing.recipe.ManufacturingRecipes.SERIALIZERS.register(bus);
         net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "pneu_empty_tank"),
             com.bettercontent.manufacturing.integration.pneutransfer.PneuTransferEmptyTankIngredient.SERIALIZER);
+        if (net.minecraftforge.fml.ModList.get().isLoaded("pneumaticcraft")) {
+            net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "pneu_native_cost_bundle"),
+                com.bettercontent.manufacturing.integration.pneumatictools.PneuNativeCostBundleIngredient.SERIALIZER);
+            net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "pneu_prepared_drill_bit"),
+                com.bettercontent.manufacturing.integration.pneumatictools.PneuPreparedDrillBitIngredient.SERIALIZER);
+            net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "pneu_prepared_assembly"),
+                com.bettercontent.manufacturing.integration.pneumatictools.PneuPreparedAssemblyIngredient.SERIALIZER);
+        }
+        if (net.minecraftforge.fml.ModList.get().isLoaded("sophisticatedstorage") || net.minecraftforge.fml.ModList.get().isLoaded("sophisticatedbackpacks")) {
+            net.minecraftforge.common.crafting.CraftingHelper.register(new net.minecraft.resources.ResourceLocation(ID, "sophisticated_cost_bundle"),
+                com.bettercontent.manufacturing.integration.sophisticatedstorage.SophisticatedCostBundleIngredient.SERIALIZER);
+        }
         var loaded = net.minecraftforge.fml.ModList.get();
         if (loaded.isLoaded("create")) com.bettercontent.manufacturing.integration.createactors.CreateActorsBlocks.register(bus);
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.addListener(ManufacturingTooltips::append);

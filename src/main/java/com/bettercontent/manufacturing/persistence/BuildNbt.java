@@ -20,20 +20,15 @@ public final class BuildNbt {
             CompoundTag root = holder.getCompound(KEY);
             typed(root, "version", Tag.TAG_INT);
             int version = root.getInt("version");
-            if (version != 1 && version != MachineBuild.VERSION) throw new IllegalArgumentException("unsupported_build_version");
-            exact(root, version == 1 ? Set.of("version", "chassis", "function", "components")
-                : Set.of("version", "chassis", "function", "components", "qualifications"));
-            if (version == 1 && !(chassis.equals("create:mechanical_drill") && function.equals("better_manufacturing:create/cutting")))
-                throw new IllegalArgumentException("unsupported_legacy_chassis");
+            if (version != MachineBuild.VERSION) throw new IllegalArgumentException("unsupported_build_version");
+            exact(root, Set.of("version", "chassis", "function", "components", "qualifications"));
             var qualifications = new java.util.HashSet<String>();
-            if (version == MachineBuild.VERSION) {
-                typed(root, "qualifications", Tag.TAG_LIST);
-                var list = (net.minecraft.nbt.ListTag) root.get("qualifications");
-                if (list.size() > MachineBuild.MAX_QUALIFICATIONS || (!list.isEmpty() && list.getElementType() != Tag.TAG_STRING))
-                    throw new IllegalArgumentException("invalid_qualifications");
-                for (int i = 0; i < list.size(); i++) {
-                    if (!qualifications.add(Identifiers.id(list.getString(i)))) throw new IllegalArgumentException("duplicate_qualification");
-                }
+            typed(root, "qualifications", Tag.TAG_LIST);
+            var list = (net.minecraft.nbt.ListTag) root.get("qualifications");
+            if (list.size() > MachineBuild.MAX_QUALIFICATIONS || (!list.isEmpty() && list.getElementType() != Tag.TAG_STRING))
+                throw new IllegalArgumentException("invalid_qualifications");
+            for (int i = 0; i < list.size(); i++) {
+                if (!qualifications.add(Identifiers.id(list.getString(i)))) throw new IllegalArgumentException("duplicate_qualification");
             }
             typed(root, "chassis", Tag.TAG_STRING);
             typed(root, "function", Tag.TAG_STRING); typed(root, "components", Tag.TAG_COMPOUND);

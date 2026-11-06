@@ -74,7 +74,9 @@ public final class CreateDrillTests {
     public static void drillNativeOperationAndAccounting(GameTestHelper helper) {
         long[] finished = {-1,-1,-1}; var blocks = new DrillBlockEntity[3];
         for (int i = 0; i < 3; i++) {
-            int z = 1 + 3*i; var item = craft(helper, i == 0 ? "tconstruct:wood" : "tconstruct:iron");
+            // Pack wood has no head; pinned slimewood head speed 4 vs iron 6
+            // supplies a real 0.75-clamped cutting contrast with native iron-tier drops.
+            int z = 1 + 3*i; var item = craft(helper, i == 0 ? "tconstruct:slimewood" : "tconstruct:iron");
             if (i == 2) item.getTag().getCompound(SettingsNbt.KEY).putInt("version", 999);
             helper.setBlock(3,1,z, AllBlocks.MECHANICAL_DRILL.getDefaultState().setValue(DrillBlock.FACING, Direction.EAST));
             blocks[i] = (DrillBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(new BlockPos(3,1,z)));
@@ -109,7 +111,7 @@ public final class CreateDrillTests {
     }
     @GameTest(template = "drill_workshop")
     public static void movingDrillUsesBakedTier(GameTestHelper helper) {
-        var item = craft(helper,"tconstruct:wood"); var state = AllBlocks.MECHANICAL_DRILL.getDefaultState().setValue(DrillBlock.FACING,Direction.EAST);
+        var item = craft(helper,"tconstruct:slimewood"); var state = AllBlocks.MECHANICAL_DRILL.getDefaultState().setValue(DrillBlock.FACING,Direction.EAST);
         var context = new MovementContext(helper.getLevel(),new StructureTemplate.StructureBlockInfo(BlockPos.ZERO,state,item.getTag().copy()),new MountedContraption());
         var actor = new DrillMovementBehaviour(); actor.startMoving(context);
         var target = helper.absolutePos(new BlockPos(5,1,3)); helper.getLevel().setBlockAndUpdate(target,Blocks.OBSIDIAN.defaultBlockState()); actor.visitNewPosition(context,target);

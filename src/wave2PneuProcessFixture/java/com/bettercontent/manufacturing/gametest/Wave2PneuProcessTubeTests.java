@@ -60,13 +60,15 @@ public final class Wave2PneuProcessTubeTests {
         var grid = grid();
         var part = ForgeRegistries.ITEMS.getValue(new ResourceLocation("tconstruct:large_plate"));
         helper.assertTrue(part instanceof ToolPartItem, "Real TCon plate missing");
-        grid.setItem(0, ((ToolPartItem) part).withMaterial(new MaterialId("tconstruct:wood")));
+        // Pack wood has no head; pinned flint head durability 85 vs iron 250
+        // yields a real bounded 0.75 pressure envelope on the consumed plate.
+        grid.setItem(0, ((ToolPartItem) part).withMaterial(new MaterialId("tconstruct:flint")));
         for (int slot : new int[]{1, 2}) {
             var available = recipe.getIngredients().get(slot).getItems();
             helper.assertTrue(available.length > 0, "Native tube construction ingredient absent: " + slot);
             grid.setItem(slot, available[0].copy());
         }
-        helper.assertTrue(recipe.matches(grid, helper.getLevel()), "Native tube construction rejected eligible wood plate");
+        helper.assertTrue(recipe.matches(grid, helper.getLevel()), "Native tube construction rejected eligible flint plate");
         var source = recipe.assemble(grid, helper.getLevel().registryAccess());
         helper.assertTrue(source.getCount() == 8 && SettingsNbt.read(source.getTag(), TUBE.toString()) != null,
             "Native eight-tube yield or baked pressure setting lost");
@@ -109,8 +111,10 @@ public final class Wave2PneuProcessTubeTests {
             "Native CC pick-block lost configured PNCR tube identity");
         var invalid = new CompoundTag();
         var bracketId = ForgeRegistries.BLOCKS.getKey(converted.getBlockState().getBlock()).toString();
-        SettingsNbt.write(invalid, new MachineSettings(bracketId,
-            java.util.Map.of("pressure_envelope", 1.5), java.util.Map.of(), null));
+        SettingsNbt.write(invalid, SettingsNbt.inherit(bracketId, "pressure_envelope",
+            SettingsNbt.read(source.getTag(), TUBE.toString())));
+        invalid.getCompound(SettingsNbt.KEY).getCompound("components").getCompound("source")
+            .putDouble("pressure_envelope", 1.5);
         variant.install(invalid);
         var invalidClone = ((BracketedPressureTubeBlock) converted.getBlockState().getBlock())
             .getCloneItemStack(converted.getBlockState(), null, helper.getLevel(), pos, player);

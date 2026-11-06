@@ -20,6 +20,7 @@ import com.simibubi.create.content.fluids.FluidTransportBehaviour;
 import com.simibubi.create.content.fluids.pipes.FluidPipeBlockEntity;
 import com.simibubi.create.content.fluids.pipes.FluidPipeBlock;
 import com.simibubi.create.content.fluids.pipes.GlassFluidPipeBlock;
+import com.simibubi.create.content.fluids.pipes.EncasedPipeBlock;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -108,6 +109,76 @@ public final class Wave2FluidsHeatPipeTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 60)
+    public static void encasingKeepsConfiguredPipeAndNativeCasingCostThroughBreakAndReplace(GameTestHelper helper) {
+        helper.assertTrue(ModList.get().isLoaded("create") && ModList.get().isLoaded("tconstruct"),
+            "Native Create and TCon required for configured casing conversion");
+        var crafted = WorkshopVariantTests.craft(helper, "fluid_pipe", "tconstruct:rock#stone");
+        var pos = new BlockPos(1, 1, 1);
+        var absolute = helper.absolutePos(pos);
+        helper.assertTrue(((BlockItem) crafted.getItem()).place(new DirectionalPlaceContext(
+            helper.getLevel(), absolute, Direction.WEST, crafted.copy(), Direction.UP)).consumesAction(),
+            "Configured base pipe did not place through native BlockItem");
+        var source = helper.getLevel().getBlockEntity(absolute);
+        helper.assertTrue(FluidVariantBehaviour.get(source) != null
+            && FluidVariantBehaviour.get(source).rate("fluid_rate") == .75,
+            "Configured base pipe lost its numeric source before casing");
+        var player = FakePlayerFactory.getMinecraft(helper.getLevel());
+        player.setItemInHand(InteractionHand.MAIN_HAND, AllBlocks.COPPER_CASING.asStack());
+        int nativeCasingCount = player.getItemInHand(InteractionHand.MAIN_HAND).getCount();
+        var hit = new BlockHitResult(Vec3.atCenterOf(absolute), Direction.UP, absolute, false);
+        var before = helper.getLevel().getBlockState(absolute);
+        helper.assertTrue(((FluidPipeBlock) before.getBlock()).use(before, helper.getLevel(), absolute,
+            player, InteractionHand.MAIN_HAND, hit).consumesAction(), "Native copper casing action failed");
+        var encasedState = helper.getLevel().getBlockState(absolute);
+        var encased = helper.getLevel().getBlockEntity(absolute);
+        var rated = FluidVariantBehaviour.get(encased);
+        helper.assertTrue(encasedState.getBlock() instanceof EncasedPipeBlock && rated != null
+            && rated.rate("fluid_rate") == .75 && rated.settings() != null
+            && player.getItemInHand(InteractionHand.MAIN_HAND).getCount() == nativeCasingCount,
+            "Encasing changed native casing use or lost configured pipe rating");
+        var ownerTag = encased.saveWithFullMetadata();
+        ownerTag.putString("UnrelatedOwnerField", "keep");
+        var reload = encased.getType().create(absolute, encasedState);
+        reload.setLevel(helper.getLevel()); reload.load(ownerTag);
+        var copied = ownerTag.copy(); FluidVariantBehaviour.get(reload).writeSafe(copied);
+        helper.assertTrue(FluidVariantBehaviour.get(reload).rate("fluid_rate") == .75
+            && copied.getString("UnrelatedOwnerField").equals("keep"),
+            "Native encased BE reload or safe settings copy erased unrelated owner NBT");
+        var drops = Block.getDrops(encasedState, helper.getLevel(), absolute, encased);
+        helper.assertTrue(drops.size() == 1 && ItemStack.isSameItemSameTags(crafted, drops.get(0)),
+            "Native encased-pipe break did not drop the configured base pipe");
+        helper.setBlock(pos, Blocks.AIR);
+        helper.assertTrue(((BlockItem) drops.get(0).getItem()).place(new DirectionalPlaceContext(
+            helper.getLevel(), absolute, Direction.WEST, drops.get(0).copy(), Direction.UP)).consumesAction(),
+            "Native configured pipe drop could not be replaced");
+        var replaced = FluidVariantBehaviour.get(helper.getLevel().getBlockEntity(absolute));
+        helper.assertTrue(replaced != null && replaced.rate("fluid_rate") == .75,
+            "Encased break/re-place laundered or discarded numeric pipe rating");
+        // The native flow cache requires its BE's first ordinary tick after re-placement.
+        helper.runAtTickTime(5, () -> {
+        var wrench = new UseOnContext(player, InteractionHand.MAIN_HAND,
+            new BlockHitResult(Vec3.atCenterOf(absolute), Direction.SOUTH, absolute, false));
+        var regular = helper.getLevel().getBlockState(absolute);
+        helper.assertTrue(((FluidPipeBlock) regular.getBlock()).onWrenched(regular, wrench).consumesAction(),
+            "Native glass-pipe wrench conversion failed after re-placement");
+        var glassState = helper.getLevel().getBlockState(absolute);
+        var glassBE = helper.getLevel().getBlockEntity(absolute);
+        helper.assertTrue(glassState.getBlock() instanceof GlassFluidPipeBlock
+            && FluidVariantBehaviour.get(glassBE).rate("fluid_rate") == .75,
+            "Glass conversion dropped inherited pipe rating");
+        var glassDrops = Block.getDrops(glassState, helper.getLevel(), absolute, glassBE);
+        helper.assertTrue(glassDrops.size() == 1 && ItemStack.isSameItemSameTags(crafted, glassDrops.get(0)),
+            "Native glass-pipe break did not drop the configured base pipe");
+        helper.setBlock(pos, Blocks.AIR);
+        helper.assertTrue(((BlockItem) glassDrops.get(0).getItem()).place(new DirectionalPlaceContext(
+            helper.getLevel(), absolute, Direction.WEST, glassDrops.get(0).copy(), Direction.UP)).consumesAction()
+            && FluidVariantBehaviour.get(helper.getLevel().getBlockEntity(absolute)).rate("fluid_rate") == .75,
+            "Glass break/re-place lost the bounded numeric pipe rating");
+        helper.succeed();
+        });
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 60)
     public static void malformedAndOversizedPipeSettingsFallBackWithoutCopyingUnboundedTag(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("create") && ModList.get().isLoaded("better_manufacturing"),
             "Real native fluid variant behaviour is required");
@@ -154,14 +225,16 @@ public final class Wave2FluidsHeatPipeTests {
     public static void ratedTankItemKeepsContentsThroughNativePlacement(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("create") && ModList.get().isLoaded("tconstruct"),
             "Fluid tank placement needs real Create and TCon");
-        ItemStack crafted = WorkshopVariantTests.craft(helper, "fluid_tank", "tconstruct:copper");
+        // Pinned slimewood head durability 375 versus iron 250: a real 1.5x
+        // large-plate vessel liner, rather than copper's sub-baseline 210/250.
+        ItemStack crafted = WorkshopVariantTests.craft(helper, "fluid_tank", "tconstruct:slimewood");
         BlockPos pos = new BlockPos(1, 1, 1);
         var firstPlace = ((BlockItem) crafted.getItem()).place(new DirectionalPlaceContext(
             helper.getLevel(), helper.absolutePos(pos), Direction.WEST, crafted.copy(), Direction.UP));
         helper.assertTrue(firstPlace.consumesAction(), "Rated native tank placement failed");
         var tank = (FluidTankBlockEntity) helper.getBlockEntity(pos);
-        helper.assertTrue(FluidVariantBehaviour.get(tank).rate("fluid_capacity") == 1.15,
-            "Copper tank capacity was not installed");
+        helper.assertTrue(FluidVariantBehaviour.get(tank).rate("fluid_capacity") == 1.5,
+            "Slimewood tank capacity was not installed");
         helper.assertTrue(tank.getTankInventory().fill(new FluidStack(Fluids.WATER, 1100),
             IFluidHandler.FluidAction.EXECUTE) == 1100, "Rated tank could not hold 1100 mB");
         ItemStack carried = crafted.copy();
@@ -171,7 +244,7 @@ public final class Wave2FluidsHeatPipeTests {
             helper.getLevel(), helper.absolutePos(pos), Direction.WEST, carried, Direction.UP));
         helper.assertTrue(secondPlace.consumesAction(), "Filled native tank item could not be placed");
         var restored = (FluidTankBlockEntity) helper.getBlockEntity(pos);
-        helper.assertTrue(FluidVariantBehaviour.get(restored).rate("fluid_capacity") == 1.15,
+        helper.assertTrue(FluidVariantBehaviour.get(restored).rate("fluid_capacity") == 1.5,
             "Filled tank placement lost the crafted capacity rating");
         helper.assertTrue(restored.getTankInventory().getFluidAmount() == 1100,
             "Create fluid tank item placement discarded 100 mB above native capacity");
@@ -182,17 +255,17 @@ public final class Wave2FluidsHeatPipeTests {
     public static void airtightBasinKeepsFluidAndBothIndependentSettings(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("better_airtight_machines") && ModList.get().isLoaded("create"),
             "Real Airtight and Create are mandatory for the combined basin lifecycle");
-        ItemStack crafted = WorkshopVariantTests.craft(helper, "basin", "tconstruct:copper");
+        ItemStack crafted = WorkshopVariantTests.craft(helper, "basin", "tconstruct:slimewood");
         BlockPos pos = new BlockPos(1, 1, 1);
         var placed = ((BlockItem) crafted.getItem()).place(new DirectionalPlaceContext(
             helper.getLevel(), helper.absolutePos(pos), Direction.WEST, crafted.copy(), Direction.UP));
         helper.assertTrue(placed.consumesAction(), "Rated basin placement failed");
         var basin = (BasinBlockEntity) helper.getBlockEntity(pos);
         var rated = FluidVariantBehaviour.get(basin);
-        helper.assertTrue(rated != null && rated.rate("fluid_capacity") == 1.15,
-            "Copper liner did not set the native basin tank capacity");
+        helper.assertTrue(rated != null && rated.rate("fluid_capacity") == 1.5,
+            "Slimewood liner did not set the native basin tank capacity");
         var input = basin.getTanks().get(false).getPrimaryHandler();
-        helper.assertTrue(input.getCapacity() == 1150, "Basin input tank was not actually resized");
+        helper.assertTrue(input.getCapacity() == 1500, "Basin input tank was not actually resized");
         helper.assertTrue(input.fill(new FluidStack(Fluids.WATER, 1100), IFluidHandler.FluidAction.EXECUTE) == 1100,
             "Rated basin refused fluid above its native 1000 mB baseline");
         var airtight = (AirtightUpgradeHolder) basin;
@@ -202,7 +275,7 @@ public final class Wave2FluidsHeatPipeTests {
         loaded.load(basin.saveWithFullMetadata());
         var restored = (BasinBlockEntity) loaded;
         helper.assertTrue(((AirtightUpgradeHolder) restored).isAirtight(), "Native Airtight seal was lost on basin reload");
-        helper.assertTrue(FluidVariantBehaviour.get(restored).rate("fluid_capacity") == 1.15,
+        helper.assertTrue(FluidVariantBehaviour.get(restored).rate("fluid_capacity") == 1.5,
             "Basin material setting was lost on Airtight reload");
         helper.assertTrue(restored.getTanks().get(false).getPrimaryHandler().getFluidAmount() == 1100,
             "Airtight/material coexisting reload deleted contained fluid");

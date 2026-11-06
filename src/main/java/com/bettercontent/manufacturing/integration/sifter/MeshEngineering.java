@@ -25,7 +25,7 @@ public final class MeshEngineering {
         if (mesh.isEmpty() || id == null || !MESHES.contains(id.toString())) return new State(1);
         var settings = SettingsNbt.read(mesh.getTag(), id.toString());
         // Only a mesh's baked screen work rate may change native Sifter timing.
-        // A valid v1 record carrying another family's airflow/pressure must not
+        // Another family's airflow/pressure must not
         // turn an installed mesh into a rated screen or increase its paid stress.
         if (settings == null || !settings.properties().keySet().equals(Set.of("work_rate"))) return new State(1);
         return new State(settings.rate(), true);

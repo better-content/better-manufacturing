@@ -9,7 +9,10 @@ import re
 ID = re.compile(r'[a-z0-9_.-]+:[a-z0-9/._-]+\Z')
 DISPOSITIONS = {'material_dependent', 'recipe_only', 'excluded'}
 USER_DEFERRED = {'sophisticatedbackpacks:hopper_upgrade', 'sophisticatedbackpacks:advanced_hopper_upgrade',
-                 'vs_clockwork:gas_tank', 'vs_clockwork:gas_vent', 'vs_clockwork:sealer'}
+                 'vs_clockwork:gas_tank', 'vs_clockwork:gas_vent', 'vs_clockwork:sealer',
+                 'vs_clockwork:brass_redstone_resistor', 'vs_clockwork:combustion_engine',
+                 'pneumaticcraft:electric_compressor'}
+USER_DEFERRED_CLOSED = {'createsifter:advanced_brass_mesh'}
 REQUIRED_NATIVE = {'two_reachable_builds', 'craft_install_operate', 'save_reload', 'recover_retool',
                    'inventory_safety', 'client_sync', 'data_reload', 'native_accounting', 'performance'}
 
@@ -35,6 +38,8 @@ def validate(data, complete=False, evidence_root=None):
             if not reason: errors.append('unexplained exclusion: ' + identity)
             elif reason == 'user_deferred_unconfirmed_identity':
                 if identity not in USER_DEFERRED: errors.append('outside authorized deferral: ' + identity)
+            elif reason == 'user_deferred_closed_acquisition':
+                if identity not in USER_DEFERRED_CLOSED: errors.append('outside authorized deferral: ' + identity)
             elif complete: errors.append('exclusion needs source-audit support: ' + identity)
         if not isinstance(entry.get('roles'), dict) or not entry['roles']: errors.append('missing roles: ' + identity)
         else:
@@ -86,7 +91,9 @@ def main():
     active = [e for e in data['entries'] if e['disposition'] != 'excluded']
     counts = {s: sum(e['status'] == s for e in active) for s in ['pending', 'implemented', 'verified']}
     print(json.dumps({'coverage_entries':len(data['entries']), 'selected_entries':len(active),
-                      'user_deferred_entries':sum(e.get('exclusion_reason') == 'user_deferred_unconfirmed_identity' for e in data['entries']), 'status_counts':counts,
+                      'user_deferred_entries':sum(e.get('exclusion_reason') in {
+                          'user_deferred_unconfirmed_identity', 'user_deferred_closed_acquisition'} for e in data['entries']),
+                      'status_counts':counts,
                       'full_roster_accepted':args.require_complete and not errors,
                       'errors':errors}, indent=2))
     return 1 if errors else 0

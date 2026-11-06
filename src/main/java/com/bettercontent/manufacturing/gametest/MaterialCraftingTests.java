@@ -129,14 +129,19 @@ public final class MaterialCraftingTests {
     }
     @GameTest(template = "empty")
     public static void nativeStatsAndBoundedMetadata(GameTestHelper helper) {
-        var material = new MaterialId("tconstruct:wood");
-        var stats = com.bettercontent.manufacturing.tconstruct.TinkersStats.read(material);
+        var wood = com.bettercontent.manufacturing.tconstruct.TinkersStats.read(new MaterialId("tconstruct:wood"));
+        var iron = com.bettercontent.manufacturing.tconstruct.TinkersStats.read(new MaterialId("tconstruct:iron"));
         var handleKey = new com.bettercontent.manufacturing.api.MaterialEngineeringProfile.Stat("tconstruct:handle", "mining_speed",
             com.bettercontent.manufacturing.api.MaterialEngineeringProfile.Semantics.ADDITIVE_MODIFIER);
         var headKey = new com.bettercontent.manufacturing.api.MaterialEngineeringProfile.Stat("tconstruct:head", "mining_speed",
             com.bettercontent.manufacturing.api.MaterialEngineeringProfile.Semantics.BASE);
-        helper.assertTrue(stats.containsKey(handleKey) && stats.containsKey(headKey), "Native stat roles conflated");
-        helper.assertTrue(handleKey.relative(stats.get(handleKey), stats.get(handleKey)) == 1, "Reference handle lost its base multiplier");
+        // Core loads upstream wood (head present); wave-two native profiles override it
+        // with the pack's wood head=null. Iron has both roles in either data set.
+        helper.assertTrue(wood.containsKey(handleKey) && iron.containsKey(handleKey)
+            && iron.containsKey(headKey) && iron.get(headKey) > 0
+            && !handleKey.equals(headKey), "Native stat roles conflated");
+        helper.assertTrue(handleKey.relative(wood.get(handleKey), wood.get(handleKey)) == 1,
+            "Reference handle lost its base multiplier");
         helper.assertTrue(com.bettercontent.manufacturing.tconstruct.TinkersStats.read(new MaterialId("better_manufacturing:unknown")).isEmpty(), "Unknown material gained fallback stats");
         var input = head(); var nested = new net.minecraft.nbt.CompoundTag();
         for (int i = 0; i < 10; i++) { var parent = new net.minecraft.nbt.CompoundTag(); parent.put("child", nested); nested = parent; }

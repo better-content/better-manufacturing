@@ -1,6 +1,7 @@
 package com.bettercontent.manufacturing.integration.powergrid;
 
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.google.gson.JsonObject;
 import com.simibubi.create.content.kinetics.crafter.MechanicalCraftingRecipe;
 import net.minecraft.core.RegistryAccess;
@@ -48,7 +49,8 @@ public final class PowergridMechanicalRecipe extends MechanicalCraftingRecipe {
                 var id = ForgeRegistries.ITEMS.getKey(output.getItem());
                 if (id == null || output.isEmpty()) return ItemStack.EMPTY;
                 try {
-                    SettingsNbt.write(output.getOrCreateTag(), PowergridPartSettings.bake(id.toString(), function, inputs));
+                    SettingsNbt.write(output.getOrCreateTag(), NativePartCapture.bake(function, inputs,
+                        () -> PowergridPartSettings.bake(id.toString(), function, inputs)));
                     return output;
                 } catch (IllegalArgumentException unsupported) { return ItemStack.EMPTY; }
             }

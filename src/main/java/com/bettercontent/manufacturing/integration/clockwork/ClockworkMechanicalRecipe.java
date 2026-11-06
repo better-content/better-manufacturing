@@ -1,6 +1,7 @@
 package com.bettercontent.manufacturing.integration.clockwork;
 
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.google.gson.JsonObject;
 import com.simibubi.create.content.kinetics.crafter.MechanicalCraftingRecipe;
 import net.minecraft.core.RegistryAccess;
@@ -40,8 +41,8 @@ public final class ClockworkMechanicalRecipe extends MechanicalCraftingRecipe {
             };
             if (role.equals("invalid") || parts.putIfAbsent(role, stack) != null) return ItemStack.EMPTY;
         }
-        try { SettingsNbt.write(result.getOrCreateTag(), ClockworkPartSettings.bake(
-            "vs_clockwork:gas_thruster", ClockworkPartSettings.GAS, parts));
+        try { SettingsNbt.write(result.getOrCreateTag(), NativePartCapture.bake(ClockworkPartSettings.GAS, parts,
+            () -> ClockworkPartSettings.bake("vs_clockwork:gas_thruster", ClockworkPartSettings.GAS, parts)));
             return result;
         } catch (IllegalArgumentException invalid) { return ItemStack.EMPTY; }
     }

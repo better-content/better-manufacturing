@@ -2,6 +2,9 @@ package com.bettercontent.manufacturing.gametest;
 
 import com.bettercontent.manufacturing.ManufacturingMod;
 import com.bettercontent.manufacturing.api.MachineSettings;
+import com.bettercontent.manufacturing.api.NumericEvaluator;
+import com.bettercontent.manufacturing.api.NumericInputs;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import com.bettercontent.manufacturing.recipe.PartVariantRecipe;
 import net.minecraft.gametest.framework.GameTest;
@@ -50,7 +53,24 @@ public final class Wave2PneuMechanicsRotationTests {
     }
     private static ItemStack rated(ItemStack original, String output, String property, double rate) {
         var stack = original.copy();
-        SettingsNbt.write(stack.getOrCreateTag(), new MachineSettings(output, Map.of(property, rate), Map.of("body", "tconstruct:wood#oak"), null));
+        if (!property.equals("rotation_rate") || rate > 1.5) {
+            // Preserve the native item while making its copied numeric record unverifiable.
+            var payload = original.hasTag() && original.getTag().contains(SettingsNbt.KEY)
+                ? original.getTag().getCompound(SettingsNbt.KEY).copy() : new net.minecraft.nbt.CompoundTag();
+            payload.putInt("version", MachineSettings.VERSION);
+            payload.putString("output", output);
+            payload.put("materials", new net.minecraft.nbt.CompoundTag());
+            payload.put("parts", new net.minecraft.nbt.CompoundTag());
+            payload.put("components", new net.minecraft.nbt.CompoundTag());
+            payload.putString("function", "better_manufacturing:invalid_rotation");
+            stack.getOrCreateTag().put(SettingsNbt.KEY, payload);
+        } else {
+            var numeric = new NumericInputs("better_manufacturing:pneupressure/rotation",
+                Map.of("body", Map.of(Measure.HEAD_MINING_SPEED, new NumericInputs.Stat(rate, 1)),
+                    "handle", Map.of(Measure.HANDLE_MINING_SPEED, new NumericInputs.Stat(rate - 1, 0))), Map.of());
+            SettingsNbt.write(stack.getOrCreateTag(), new MachineSettings(output,
+                NumericEvaluator.evaluate(output, numeric, null), Map.of(), null, numeric));
+        }
         return stack;
     }
     private static double rotation(ItemStack stack, String id) {
@@ -77,9 +97,10 @@ public final class Wave2PneuMechanicsRotationTests {
             "Physical rotor blade gate, preview or part consumption changed");
         rotorGrid.setItem(6, rated(blade, "pneumaticcraft:turbine_blade", "rotation_rate", 999));
         rotorGrid.setItem(8, rated(blade, "pneumaticcraft:turbine_blade", "work_rate", 1.5));
-        var fallback = rotorRecipe.assemble(rotorGrid, helper.getLevel().registryAccess());
-        helper.assertTrue(rotation(fallback, "pneumaticcraft:turbine_rotor") == 1,
-            "Tampered native blades laundered rotation into a newly baked rotor");
+        var malformedBlades = rotorGrid.getItem(6).copy();
+        var rejectedRotor = rotorRecipe.assemble(rotorGrid, helper.getLevel().registryAccess());
+        helper.assertTrue(rejectedRotor.isEmpty() && ItemStack.isSameItemSameTags(malformedBlades, rotorGrid.getItem(6)),
+            "Malformed configured blades must reject the rotor craft without changing the inputs");
         var fluxRecipe = recipe(helper, "flux_compressor"); var fluxGrid = ingredients(helper, fluxRecipe);
         helper.assertTrue(fluxGrid.getItem(4).is(valid.getItem()), "Native flux recipe lost its turbine rotor gate");
         fluxGrid.setItem(4, valid);
@@ -90,9 +111,8 @@ public final class Wave2PneuMechanicsRotationTests {
             "Native flux compressor ignored physically consumed rated rotor/parts");
         fluxGrid.setItem(4, rated(valid, "pneumaticcraft:turbine_rotor", "rotation_rate", 999));
         var invalidFlux = fluxRecipe.assemble(fluxGrid, helper.getLevel().registryAccess());
-        var invalidSettings = SettingsNbt.read(invalidFlux.getTag(), "pneumaticcraft:flux_compressor");
-        helper.assertTrue(invalidSettings != null && invalidSettings.properties().get("compression_rate") == 1,
-            "Tampered rotor was promoted into free compressor work or blocked native fallback");
+        helper.assertTrue(invalidFlux.isEmpty(),
+            "Malformed configured rotor must reject the compressor craft, not become baseline production");
         helper.succeed();
     }
 }

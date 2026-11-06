@@ -27,8 +27,7 @@ public abstract class PneupressureAssemblyTubeMixin {
         double envelope = settings.properties().get("pressure_envelope");
         if (!Double.isFinite(envelope) || envelope < .75 || envelope > 1) return;
         var result = output.copy();
-        SettingsNbt.write(result.getOrCreateTag(), new MachineSettings(outId.toString(),
-            Map.of("pressure_envelope", envelope), settings.materials(), null));
+        SettingsNbt.write(result.getOrCreateTag(), SettingsNbt.inherit(outId.toString(), "pressure_envelope", settings));
         cir.setReturnValue(result);
     }
 }

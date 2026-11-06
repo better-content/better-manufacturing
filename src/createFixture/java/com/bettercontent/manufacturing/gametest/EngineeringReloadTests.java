@@ -1,82 +1,92 @@
 package com.bettercontent.manufacturing.gametest;
 
 import com.bettercontent.manufacturing.ManufacturingMod;
-import com.bettercontent.manufacturing.api.MaterialPolicy;
-import com.bettercontent.manufacturing.data.*;
-import com.bettercontent.manufacturing.integration.create.*;
+import com.bettercontent.manufacturing.integration.create.CreateManufacturing;
+import com.bettercontent.manufacturing.integration.create.DrillEngineering;
+import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import com.google.gson.JsonParser;
+import com.simibubi.create.content.kinetics.drill.DrillBlockEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.*;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraftforge.gametest.*;
-import java.nio.file.*;
-import java.util.*;
+import net.minecraftforge.gametest.GameTestHolder;
+import net.minecraftforge.gametest.PrefixGameTestTemplate;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.concurrent.CompletionException;
 
+/** Reload native TCon stats without reinterpreting any already crafted v2 machine or installed state. */
 @GameTestHolder(ManufacturingMod.ID)
 @PrefixGameTestTemplate(false)
 public final class EngineeringReloadTests {
     @GameTest(template = "drill_workshop", batch = "engineering_reload", timeoutTicks = 1200)
-    public static void changedNativeDataAndAtomicPolicyReload(GameTestHelper helper) throws Exception {
+    public static void changedNativeDataKeepsV2SnapshotsAndInstalledState(GameTestHelper helper) throws Exception {
         helper.assertTrue(Boolean.getBoolean("forge.gameTestServer"), "Reload fixture may only modify an owner-local GameTest world");
         var server = helper.getLevel().getServer();
-        var initial = EngineeringCatalog.view(false);
-        helper.assertTrue(initial.ready() && initial.policies().containsKey("tconstruct:wood"), "Authored engineering policies were not loaded");
-        var wood = CreateManufacturing.behaviour(CreateDrillTests.placed(helper, new BlockPos(1, 1, 1), CreateDrillTests.craft(helper, "tconstruct:wood")));
-        var cobalt = CreateManufacturing.behaviour(CreateDrillTests.placed(helper, new BlockPos(3, 1, 1), CreateDrillTests.craft(helper, "tconstruct:cobalt")));
-        var screen = (com.bettercontent.manufacturing.integration.sifter.ScreenAccess) SifterFrameTests.machine(helper, 10, SifterFrameTests.mesh(helper, "string", "tconstruct:iron"), false);
-        helper.assertTrue(screen.manufacturing$screenState().rate() == 1, "Missing native iron frame reference");
-        var wetScreen = (com.bettercontent.manufacturing.integration.sifter.ScreenAccess) SifterFrameTests.machine(helper, 13, SifterFrameTests.mesh(helper, "string", "tconstruct:wood"), true);
-        helper.assertTrue(wetScreen.manufacturing$screenState().rate() == .75, "Missing crafted wood settings");
-        double oldRate = cobalt.state().rate();
-        helper.assertTrue(wood.state().allowed() && oldRate > 1 && oldRate < 1.5, "Missing distinct native reference builds");
+        var original = CreateDrillTests.craft(helper, "tconstruct:slimewood");
+        var iron = CreateDrillTests.craft(helper, "tconstruct:iron");
+        double before = DrillEngineering.evaluate(original.getTag()).rate();
+        helper.assertTrue(before == .75 && DrillEngineering.evaluate(iron.getTag()).rate() == 1,
+            "Missing distinct eligible native head/reference materials");
+        var installed = CreateDrillTests.placed(helper, new BlockPos(2, 1, 2), original);
+        var state = CreateManufacturing.behaviour(installed).state();
+        helper.assertTrue(state.rate() == before, "Installation did not retain v2 numerical inputs");
+        var saved = installed.saveWithFullMetadata();
+        var originalSettings = original.getTag().get(SettingsNbt.KEY).copy();
         var originalPacks = new ArrayList<>(server.getPackRepository().getSelectedIds());
-        Path pack = server.getWorldPath(LevelResource.DATAPACK_DIR).resolve("manufacturing-catalog-test");
+        Path pack = server.getWorldPath(LevelResource.DATAPACK_DIR).resolve("manufacturing-native-v2-reload-test");
         helper.assertTrue(!Files.exists(pack), "Refusing to overwrite an existing reload fixture");
-        Path policy = pack.resolve("data/better_manufacturing/engineering/materials/wood.json");
         Path stats = pack.resolve("data/tconstruct/tinkering/materials/stats/iron.json");
-        Files.createDirectories(policy.getParent()); Files.createDirectories(stats.getParent());
-        Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":15,\"description\":\"Owner-local Manufacturing reload fixture\"}}");
-        var priorWood = initial.policies().get("tconstruct:wood");
-        var restricted = new MaterialPolicy(priorWood.material(), Set.of("tconstruct:tool_handle"), true, Map.of("screen_rate", 1.25), Set.of());
-        Files.writeString(policy, EngineeringPolicyJson.write(restricted).toString());
+        Files.createDirectories(stats.getParent());
+        Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":15,\"description\":\"Owner-local v2 material reload fixture\"}}");
         try (var input = server.getResourceManager().getResource(new ResourceLocation("tconstruct:tinkering/materials/stats/iron.json")).orElseThrow().openAsReader()) {
             var json = JsonParser.parseReader(input).getAsJsonObject();
             json.getAsJsonObject("stats").getAsJsonObject("tconstruct:head").addProperty("mining_speed", 3.0);
             Files.writeString(stats, json.toString());
         }
         server.getPackRepository().reload();
-        var changedPacks = new ArrayList<>(originalPacks); changedPacks.add("file/manufacturing-catalog-test");
+        var changedPacks = new ArrayList<>(originalPacks);
+        changedPacks.add("file/manufacturing-native-v2-reload-test");
         server.reloadResources(changedPacks).thenRunAsync(() -> {
-            helper.assertTrue(wood.state().rate() == .75 && cobalt.state().rate() == oldRate, "Reload changed an existing cutter");
-            helper.assertTrue(DrillEngineering.evaluate(CreateDrillTests.craft(helper, "tconstruct:cobalt").getTag()).rate() == 1.5, "Future cutter craft ignored changed native stats");
-            helper.assertTrue(screen.manufacturing$screenState().rate() == 1 && wetScreen.manufacturing$screenState().rate() == .75, "Reload changed an installed mesh");
-            var freshMesh = SifterFrameTests.mesh(helper, "string", "tconstruct:wood");
-            helper.assertTrue(com.bettercontent.manufacturing.integration.sifter.MeshEngineering.evaluate(freshMesh, false).rate() == 1.25, "Future mesh craft ignored changed authored rating");
-            helper.assertTrue(EngineeringCatalog.view(false).generation() > initial.generation(), "Catalog generation did not change");
-            try { Files.writeString(policy, "{\"schema\":999}"); } catch (Exception failure) { throw new CompletionException(failure); }
-        }, server).thenCompose(ignored -> {
-            var beforeFailedReload = EngineeringCatalog.view(false);
-            return server.reloadResources(changedPacks).handleAsync((ok, failure) -> {
-                helper.assertTrue(failure != null, "Malformed engineering reload unexpectedly succeeded");
-                helper.assertTrue(EngineeringCatalog.view(false).equals(beforeFailedReload), "Failed reload published a partial engineering catalog");
+            helper.assertTrue(original.getTag().get(SettingsNbt.KEY).equals(originalSettings)
+                && DrillEngineering.evaluate(original.getTag()).rate() == before,
+                "Material reload reinterpreted a crafted v2 numeric snapshot");
+            helper.assertTrue(CreateManufacturing.behaviour(installed).state().rate() == before,
+                "Material reload reinterpreted an installed cutter");
+            var restored = new DrillBlockEntity(installed.getType(), installed.getBlockPos(), installed.getBlockState());
+            restored.setLevel(helper.getLevel()); restored.load(saved);
+            helper.assertTrue(CreateManufacturing.behaviour(restored).state().rate() == before,
+                "Material reload reinterpreted saved/reloaded installed settings");
+            var drops = Block.getDrops(installed.getBlockState(), helper.getLevel(), installed.getBlockPos(), installed);
+            helper.assertTrue(drops.size() == 1 && drops.get(0).getTag().get(SettingsNbt.KEY).equals(originalSettings),
+                "Material reload changed a native drop or discarded v2 settings");
+            var future = CreateDrillTests.craft(helper, "tconstruct:slimewood");
+            helper.assertTrue(DrillEngineering.evaluate(future.getTag()).rate() > before + .1
+                && DrillEngineering.evaluate(future.getTag()).rate() < 1.5,
+                "Future craft ignored changed native iron reference stats");
+        }, server).handle((ok, failure) -> failure).thenCompose(failure ->
+            server.reloadResources(originalPacks).handleAsync((ok, restoreFailure) -> {
+                try (var files = Files.walk(pack)) {
+                    for (var file : files.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(file);
+                    server.getPackRepository().reload();
+                } catch (Exception cleanupFailure) {
+                    helper.fail("Native reload fixture could not clean its owner-local datapack: " + cleanupFailure);
+                    return null;
+                }
+                if (failure != null || restoreFailure != null) {
+                    helper.fail("Native v2 reload/restore failed: " + (failure != null ? failure : restoreFailure));
+                    return null;
+                }
+                helper.assertTrue(CreateManufacturing.behaviour(installed).state().rate() == before
+                    && DrillEngineering.evaluate(CreateDrillTests.craft(helper, "tconstruct:slimewood").getTag()).rate() == before,
+                    "Restored native material pack changed old installation or future crafting");
+                helper.succeed();
                 return null;
-            }, server);
-        }).thenCompose(ignored -> {
-            var beforeFailedReload = EngineeringCatalog.view(false);
-            try { Files.writeString(policy, "{\"schema\":"); } catch (Exception failure) { throw new CompletionException(failure); }
-            return server.reloadResources(changedPacks).handleAsync((ok, failure) -> {
-                helper.assertTrue(failure != null, "Syntactically broken engineering file was silently skipped");
-                helper.assertTrue(EngineeringCatalog.view(false).equals(beforeFailedReload), "Syntax failure removed authored restrictions");
-                return null;
-            }, server);
-        }).thenCompose(ignored -> server.reloadResources(originalPacks)).whenComplete((ok, failure) -> server.execute(() -> {
-            if (failure != null) { helper.fail("Actual reload fixture failed: " + failure); return; }
-            helper.assertTrue(wood.state().allowed() && Math.abs(cobalt.state().rate() - oldRate) < 1e-9, "Restored datapacks left stale machine state");
-            helper.assertTrue(EngineeringCatalog.view(false).policies().equals(initial.policies()), "Restored catalog differs from original");
-            helper.assertTrue(screen.manufacturing$screenState().rate() == 1 && wetScreen.manufacturing$screenState().wetCompatible(), "Restored Sifter policy remained cached");
-            helper.succeed();
-        }));
+            }, server));
     }
 }

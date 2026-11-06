@@ -13,7 +13,7 @@ public final class ManufacturingTooltips {
         if (id == null || id.toString().equals("create:mechanical_harvester")) return; // Construction-only; historical tags confer no native work.
         var settings = SettingsNbt.read(stack.getTag(), id.toString());
         if (settings == null) return;
-        // Do not describe a valid-v1 but wrong-family tag as a native rating when its consumer uses baseline.
+        // Do not describe an otherwise valid wrong-family tag as a rating when its consumer uses baseline.
         var required = switch (id.toString()) {
             case "create:encased_fan", "create:propeller" -> java.util.Set.of("airflow");
             case "create:mechanical_pump" -> java.util.Set.of("pressure");
@@ -30,7 +30,7 @@ public final class ManufacturingTooltips {
                 double value = settings.properties().get(key);
                 return value < .75 || value > 1.5;
             })) return;
-        // The record already contains final baked values. Never look up live TCon material
+        // The decoded record contains evaluated values. Never look up live TCon material
         // policies in a tooltip: reloads affect future crafts, not this saved item.
         settings.materials().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(entry ->
             event.getToolTip().add(Component.translatable("better_manufacturing.variant.material",

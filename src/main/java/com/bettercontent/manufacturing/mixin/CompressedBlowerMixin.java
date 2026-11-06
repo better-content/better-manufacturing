@@ -46,9 +46,14 @@ public final class CompressedBlowerMixin {
                 var settings = com.bettercontent.manufacturing.persistence.SettingsNbt.read(original.getTag(), oldId.toString());
                 if (settings != null && settings.properties().keySet().equals(java.util.Set.of("airflow"))) {
                     double flow = settings.properties().get("airflow");
-                    if (Double.isFinite(flow) && flow >= .75 && flow <= 1.5)
-                        com.bettercontent.manufacturing.persistence.SettingsNbt.write(replacement.getOrCreateTag(),
-                            new com.bettercontent.manufacturing.api.MachineSettings(newId.toString(), settings.properties(), settings.materials(), null));
+                    if (Double.isFinite(flow) && flow >= .75 && flow <= 1.5) {
+                        try {
+                            com.bettercontent.manufacturing.persistence.SettingsNbt.write(replacement.getOrCreateTag(),
+                                com.bettercontent.manufacturing.persistence.SettingsNbt.inherit(newId.toString(), "airflow", settings));
+                        } catch (IllegalArgumentException unsupported) {
+                            // Unknown native mesh transformations keep their native result, not a forged rating.
+                        }
+                    }
                 }
             }
             manufacturing$setInstalledMesh(replacement);

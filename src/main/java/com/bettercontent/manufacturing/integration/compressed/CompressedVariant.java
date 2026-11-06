@@ -14,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.registries.ForgeRegistries;
 
-/** Native Compressed Creativity block-entity persistence. Carries only the final crafted settings. */
+/** Native Compressed Creativity block-entity persistence. Carries the versioned crafted settings. */
 public final class CompressedVariant extends BlockEntityBehaviour {
     public static final BehaviourType<CompressedVariant> TYPE = new BehaviourType<>("better_manufacturing:compressedcreativity_variant");
     private Tag raw;
@@ -34,7 +34,7 @@ public final class CompressedVariant extends BlockEntityBehaviour {
             }
         }
         settings = SettingsNbt.read(tag, outputId());
-        // A valid v1 record for the wrong native role is still inert. Keep bounded
+        // A valid record for the wrong native role is still inert. Keep bounded
         // raw data for drops, but never operate a blower/tube/engine from a foreign
         // property or let a bracket raise its native PneumaticCraft pressure tier.
         String required = switch (outputId()) {
@@ -53,7 +53,7 @@ public final class CompressedVariant extends BlockEntityBehaviour {
         if (raw != null) tag.put(SettingsNbt.KEY, raw.copy());
         // CC's bracket loot yields a *native PNCR tube*. Export a derived native-ID
         // record only for an actually rated bracket; loot copies this conditional
-        // field instead of seeding an empty v1 record on every unconfigured drop.
+        // field instead of seeding a rating on every unconfigured drop.
         final String dropKey = "better_manufacturing:pressure_tube_drop";
         tag.remove(dropKey);
         String nativeTube = switch (outputId()) {
@@ -64,7 +64,7 @@ public final class CompressedVariant extends BlockEntityBehaviour {
         };
         if (!client && nativeTube != null && settings != null && settings.properties().containsKey("pressure_envelope")) {
             var converted = new CompoundTag();
-            SettingsNbt.write(converted, new MachineSettings(nativeTube, settings.properties(), settings.materials(), null));
+            SettingsNbt.write(converted, SettingsNbt.inherit(nativeTube, "pressure_envelope", settings));
             tag.put(dropKey, converted.getCompound(SettingsNbt.KEY));
         }
     }

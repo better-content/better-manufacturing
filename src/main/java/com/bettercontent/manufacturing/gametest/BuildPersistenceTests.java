@@ -37,12 +37,14 @@ public final class BuildPersistenceTests {
         holder.getCompound(BuildNbt.KEY).putInt("version", 1);
         holder.getCompound(BuildNbt.KEY).remove("qualifications");
         holder.getCompound(BuildNbt.KEY).putString("function", "better_manufacturing:create/cutting");
-        var legacy = holder.copy();
-        var decoded = BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting");
-        helper.assertTrue(decoded.valid() && decoded.build().version() == MachineBuild.VERSION && decoded.build().qualifications().isEmpty()
-            && decoded.build().components().equals(sample().components()) && holder.equals(legacy), "Valid legacy Drill data was lost or mutated");
+        var obsolete = holder.copy();
+        var rejected = BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting");
+        helper.assertTrue(rejected.present() && !rejected.valid() && holder.equals(obsolete),
+            "Removed v1 Drill data was accepted or mutated");
         holder.getCompound(BuildNbt.KEY).put("qualifications", new net.minecraft.nbt.ListTag());
-        helper.assertTrue(!BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting").valid(), "Legacy records accepted unversioned extra fields");
+        obsolete = holder.copy();
+        helper.assertTrue(!BuildNbt.read(holder, CHASSIS, "better_manufacturing:create/cutting").valid()
+            && holder.equals(obsolete), "Obsolete record with extra fields was accepted or mutated");
         helper.succeed();
     }
     @GameTest(template = "empty")
@@ -67,8 +69,12 @@ public final class BuildPersistenceTests {
     }
     @GameTest(template = "empty")
     public static void componentBudget(GameTestHelper helper) {
-        helper.assertTrue(ManufacturingContent.COMPONENTS.size() == 9
-            && ManufacturingContent.COMPONENT_IDS.contains("compressed_iron_valve_blank"), "Physical component roster changed");
+        helper.assertTrue(ManufacturingContent.COMPONENTS.size() == 12
+            && java.util.Set.copyOf(ManufacturingContent.COMPONENT_IDS).equals(java.util.Set.of(
+                "pla_stock", "pp_stock", "lactide", "propylene", "tin_carboxylate_catalyst",
+                "supported_dehydrogenation_catalyst", "coordination_polymerisation_catalyst",
+                "lactic_culture", "compressed_iron_valve_blank", "dense_cell_blank",
+                "conductive_casing_blank", "mellarium_temp_blank")), "Physical component roster changed");
         helper.assertTrue(ManufacturingContent.COMPONENTS.size() <= ManufacturingContent.COMPONENT_CEILING,
             "Component budget exceeded");
         helper.assertTrue(ManufacturingContent.COMPONENTS.stream().allMatch(r -> r.isPresent()), "Missing component registrations");

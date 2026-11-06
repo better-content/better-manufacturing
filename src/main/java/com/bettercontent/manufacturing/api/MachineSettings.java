@@ -3,8 +3,13 @@ package com.bettercontent.manufacturing.api;
 import java.util.Map;
 
 /** A crafting-time result, not an inventory of the parts used to make it. */
-public record MachineSettings(String output, Map<String, Double> properties, Map<String, String> materials, String harvestTier) {
-    public static final int VERSION = 1;
+public record MachineSettings(String output, Map<String, Double> properties, Map<String, String> materials,
+                              String harvestTier, NumericInputs numericInputs) {
+    /** Only crafting-time numeric-input records are persisted. */
+    public static final int VERSION = 2;
+    public MachineSettings(String output, Map<String, Double> properties, Map<String, String> materials, String harvestTier) {
+        this(output, properties, materials, harvestTier, null);
+    }
     public MachineSettings {
         Identifiers.id(output);
         properties = Map.copyOf(properties); materials = Map.copyOf(materials);

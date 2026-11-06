@@ -6,6 +6,10 @@ import com.bettercontent.manufacturing.integration.pneupressure.PneupressureBuil
 import com.bettercontent.manufacturing.integration.pneupressure.PneupressureFuelCost;
 import com.bettercontent.manufacturing.integration.pneupressure.PneupressureSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
+import com.bettercontent.manufacturing.api.NumericEvaluator;
+import com.bettercontent.manufacturing.api.NumericInputs;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
+import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import me.desht.pneumaticcraft.api.tileentity.IAirHandlerMachine;
 import me.desht.pneumaticcraft.common.block.entity.AbstractAirHandlingBlockEntity;
 import me.desht.pneumaticcraft.common.block.entity.AirCompressorBlockEntity;
@@ -46,8 +50,10 @@ public final class Wave2PneuMechanicsCompressorTests {
         helper.assertTrue(be instanceof AirCompressorBlockEntity && be instanceof PneupressureBuild, "Compressor native BE/mixin absent");
         var compressor = (AirCompressorBlockEntity) be;
         compressor.onUpgradesChanged(); // Native zero-upgrade baseline before comparing paid work.
-        var settings = PneupressureSettings.bake("pneumaticcraft:air_compressor", PneupressureSettings.COMPRESSION, Map.of(
-            "body", part("tconstruct:large_plate", material), "handle", part("tconstruct:tough_handle", material)));
+        var parts = Map.of("body", part("tconstruct:large_plate", material),
+            "handle", part("tconstruct:tough_handle", material));
+        var settings = NativePartCapture.bake(PneupressureSettings.COMPRESSION, parts,
+            () -> PneupressureSettings.bake("pneumaticcraft:air_compressor", PneupressureSettings.COMPRESSION, parts));
         var tag = new CompoundTag(); SettingsNbt.write(tag, settings);
         ((PneupressureBuild) compressor).pneupressure$install(tag.get(SettingsNbt.KEY));
         return compressor;
@@ -60,23 +66,33 @@ public final class Wave2PneuMechanicsCompressorTests {
     @GameTest(template = "pneu_workshop")
     public static void slowerWorkingPartsNeverProduceUnpaidAir(GameTestHelper helper) throws Exception {
         helper.assertTrue(ModList.get().isLoaded("pneumaticcraft") && ModList.get().isLoaded("tconstruct"), "Real PNCR/TCon missing");
-        var wood = machine(helper, new BlockPos(2, 2, 2), "tconstruct:wood#oak");
+        // Pinned slimewood has a real head (4 vs iron 6 mining speed) and a
+        // slower handle (-0.15 vs iron 0); pack wood has no native head.
+        double slowerRate = Math.sqrt(.75 * .85);
+        var slower = machine(helper, new BlockPos(2, 2, 2), "tconstruct:slimewood");
         var iron = machine(helper, new BlockPos(5, 2, 2), "tconstruct:iron");
-        helper.assertTrue(PneupressureBuild.rate(wood, "compression_rate") == .75
-            && PneupressureBuild.rate(iron, "compression_rate") == 1, "Pack plates/handles failed contrasting compressor rating");
-        for (int n = 0; n < 3; n++) wood.tickServer();
-        helper.assertTrue(wood.curFuelUsage >= 1 && air(wood) == 0 && wood.burnTime == 0,
+        helper.assertTrue(Math.abs(PneupressureBuild.rate(slower, "compression_rate") - slowerRate) < 1e-6
+            && PneupressureBuild.rate(iron, "compression_rate") == 1, "Native plates/handles failed contrasting compressor rating");
+        for (int n = 0; n < 3; n++) slower.tickServer();
+        helper.assertTrue(slower.curFuelUsage >= 1 && air(slower) == 0 && slower.burnTime == 0,
             "Unpowered rated compressor produced free air or rounded fuel cost to zero");
-        var woodRemainder = wood.getPrimaryInventory().insertItem(0, new ItemStack(Items.COAL), false);
+        var slowerRemainder = slower.getPrimaryInventory().insertItem(0, new ItemStack(Items.COAL), false);
         var ironRemainder = iron.getPrimaryInventory().insertItem(0, new ItemStack(Items.COAL), false);
-        helper.assertTrue(woodRemainder.isEmpty() && ironRemainder.isEmpty(), "PNCR native fuel inventory rejected coal");
-        for (int n = 0; n < 12; n++) { wood.tickServer(); iron.tickServer(); }
-        int woodAir = air(wood), ironAir = air(iron);
-        helper.assertTrue(woodAir > 0 && ironAir > woodAir && Math.abs(woodAir / (double) ironAir - .8) < .06
-            && wood.curFuelUsage >= 1 && iron.curFuelUsage >= 1,
-            "Native compressor air production ignored rated 8:10 work budget: " + woodAir + "/" + ironAir);
-        helper.assertTrue(wood.burnTime > 0 && iron.burnTime > 0 && wood.burnTime == iron.burnTime,
-            "Rated wood compressor did not pay one native burn unit per productive tick");
+        helper.assertTrue(slowerRemainder.isEmpty() && ironRemainder.isEmpty(), "PNCR native fuel inventory rejected coal");
+        for (int n = 0; n < 12; n++) { slower.tickServer(); iron.tickServer(); }
+        int slowerAir = air(slower), ironAir = air(iron);
+        int slowerBudget = Math.max(1, (int) Math.round(slower.getBaseProduction() * slowerRate));
+        int ironBudget = iron.getBaseProduction();
+        helper.assertTrue(slowerAir > 0 && ironAir > slowerAir
+            && slowerAir % slowerBudget == 0 && ironAir % ironBudget == 0
+            && Math.abs(slowerAir / (double) slowerBudget - ironAir / (double) ironBudget) <= 1
+            && slower.curFuelUsage >= 1 && iron.curFuelUsage >= 1,
+            "Native compressor air production ignored paid per-tick slower work budget: " + slowerAir + "/" + ironAir);
+        helper.assertTrue(slower.burnTime > 0 && iron.burnTime > 0
+            && Math.abs(slower.burnTime - iron.burnTime)
+                <= Math.abs(slowerAir / slowerBudget - ironAir / ironBudget),
+            "Rated slimewood compressor did not pay one native burn unit per productive tick: "
+                + slower.burnTime + "/" + iron.burnTime);
         helper.succeed();
     }
 
@@ -88,8 +104,13 @@ public final class Wave2PneuMechanicsCompressorTests {
         var pos = new BlockPos(2, 2, 2);
         var fast = machine(helper, pos, "tconstruct:iron");
         var tag = new CompoundTag();
+        // Synthetic saved-stat boundary (not a claim that an obtainable material rates 1.5).
+        var numeric = new NumericInputs(PneupressureSettings.COMPRESSION,
+            Map.of("body", Map.of(Measure.HEAD_MINING_SPEED, new NumericInputs.Stat(1.5, 1),
+                    Measure.HEAD_DURABILITY, new NumericInputs.Stat(1, 1)),
+                "handle", Map.of(Measure.HANDLE_MINING_SPEED, new NumericInputs.Stat(.5, 0))), Map.of());
         SettingsNbt.write(tag, new MachineSettings("pneumaticcraft:air_compressor",
-            Map.of("compression_rate", 1.5, "pressure_envelope", 1.0), Map.of("body", "tconstruct:iron"), null));
+            NumericEvaluator.evaluate("pneumaticcraft:air_compressor", numeric, null), Map.of(), null, numeric));
         ((PneupressureBuild) fast).pneupressure$install(tag.get(SettingsNbt.KEY));
         helper.assertTrue(PneupressureBuild.rate(fast, "compression_rate") == 1.5, "Rated bound not installed");
         fast.tickServer();
@@ -179,15 +200,18 @@ public final class Wave2PneuMechanicsCompressorTests {
             "PNCR native electrostatic BE absent");
         var source = (ElectrostaticCompressorBlockEntity) sourceBE;
         var recipient = (ElectrostaticCompressorBlockEntity) recipientBE;
-        for (var entry : Map.of(source, "tconstruct:iron", recipient, "tconstruct:wood#oak").entrySet()) {
-            var build = PneupressureSettings.bake("pneumaticcraft:electrostatic_compressor", PneupressureSettings.COMPRESSION,
-                Map.of("body", part("tconstruct:large_plate", entry.getValue()),
-                    "handle", part("tconstruct:tough_handle", entry.getValue()), "rotor", new ItemStack(rotor)));
+        for (var entry : Map.of(source, "tconstruct:iron", recipient, "tconstruct:slimewood").entrySet()) {
+            var parts = Map.of("body", part("tconstruct:large_plate", entry.getValue()),
+                "handle", part("tconstruct:tough_handle", entry.getValue()), "rotor", new ItemStack(rotor));
+            var build = NativePartCapture.bake(PneupressureSettings.COMPRESSION, parts,
+                () -> PneupressureSettings.bake("pneumaticcraft:electrostatic_compressor", PneupressureSettings.COMPRESSION, parts));
             var tag = new CompoundTag(); SettingsNbt.write(tag, build);
             ((PneupressureBuild) entry.getKey()).pneupressure$install(tag.get(SettingsNbt.KEY));
         }
+        double slowerRate = Math.sqrt(.75 * .85); // native slimewood head+handle vs iron
         helper.assertTrue(PneupressureBuild.rate(source, "compression_rate") == 1
-            && PneupressureBuild.rate(recipient, "compression_rate") == .75, "Real pack materials did not distinguish grid recipients");
+            && Math.abs(PneupressureBuild.rate(recipient, "compression_rate") - slowerRate) < 1e-6,
+            "Native materials did not distinguish grid recipients");
         source.tickServer(); recipient.tickServer();
         helper.assertTrue(air(source) == 0 && air(recipient) == 0, "Electrostatic compressor made air without lightning");
         // Pinned PNCR grid caller invokes member.onStruckByLightning(member, grid.size())
@@ -199,11 +223,11 @@ public final class Wave2PneuMechanicsCompressorTests {
         strike.setAccessible(true);
         strike.invoke(source, source, 100);
         helper.assertTrue(air(source) == 2000 && air(recipient) == 0,
-            "Native iron grid member charged incorrectly or leaked air to wood");
+            "Native iron grid member charged incorrectly or leaked air to slimewood");
         strike.invoke(recipient, recipient, 100);
-        helper.assertTrue(air(source) == 2000 && air(recipient) == 1500,
-            "Wood grid member failed to receive bounded 0.75-rated lightning share: iron="
-                + air(source) + " wood=" + air(recipient));
+        helper.assertTrue(air(source) == 2000 && air(recipient) == Math.round(2000 * slowerRate),
+            "Slimewood grid member failed to receive bounded native-rated lightning share: iron="
+                + air(source) + " slimewood=" + air(recipient));
         helper.succeed();
     }
 }

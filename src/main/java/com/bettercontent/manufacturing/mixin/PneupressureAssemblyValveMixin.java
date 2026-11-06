@@ -27,8 +27,8 @@ public abstract class PneupressureAssemblyValveMixin {
         double envelope = blank.properties().get("pressure_envelope");
         if (!Double.isFinite(envelope) || envelope < .75 || envelope > 1) return;
         ItemStack result = nativeOutput.copy();
-        SettingsNbt.write(result.getOrCreateTag(), new MachineSettings("pneumaticcraft:pressure_chamber_valve",
-            Map.of("pressure_envelope", envelope), blank.materials(), null));
+        SettingsNbt.write(result.getOrCreateTag(), SettingsNbt.inherit("pneumaticcraft:pressure_chamber_valve",
+            "pressure_envelope", blank));
         cir.setReturnValue(result);
     }
 }

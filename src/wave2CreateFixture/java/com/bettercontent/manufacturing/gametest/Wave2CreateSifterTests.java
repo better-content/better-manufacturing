@@ -39,8 +39,11 @@ public final class Wave2CreateSifterTests {
     }
 
     private static ItemStack craft(GameTestHelper helper, String id, String material, ItemStack predecessor) {
-        var found = helper.getLevel().getRecipeManager().byKey(new ResourceLocation("createsifter:" + id))
-            .orElseThrow(() -> new AssertionError("Missing production Sifter frame recipe " + id));
+        // Production20 removes the native basic Sifter ID and reauthors its
+        // part-consuming progression recipe; the native brass upgrade keeps its ID.
+        var recipeId = id.equals("sifter") ? "kubejs:powered_works/refinement/sifter" : "createsifter:" + id;
+        var found = helper.getLevel().getRecipeManager().byKey(new ResourceLocation(recipeId))
+            .orElseThrow(() -> new AssertionError("Missing production Sifter frame recipe " + recipeId));
         helper.assertTrue(found instanceof PartVariantRecipe, "Sifter frame has no craft-time native part calculation");
         var recipe = (PartVariantRecipe) found;
         var grid = CreateDrillTests.grid();
@@ -67,15 +70,20 @@ public final class Wave2CreateSifterTests {
             "Real Create, CreateSifter and TConstruct required for positive frame test");
         SifterBlockEntity[] machines = new SifterBlockEntity[2];
         for (int choice = 0; choice < 2; choice++) {
-            var item = craft(helper, "sifter", choice == 0 ? "tconstruct:wood#oak" : "tconstruct:iron", ItemStack.EMPTY);
+            // Native slimewood handle mining-speed modifier -0.15 contrasts with
+            // iron's 0; pack wood and iron both have 0 and cannot produce .75.
+            var item = craft(helper, "sifter", choice == 0 ? "tconstruct:slimewood" : "tconstruct:iron", ItemStack.EMPTY);
             var pos = helper.absolutePos(new BlockPos(2 + choice * 4, 2, 2));
             var placed = ((BlockItem) item.getItem()).place(new DirectionalPlaceContext(helper.getLevel(), pos, Direction.WEST, item.copy(), Direction.UP));
             helper.assertTrue(placed.consumesAction(), "Native Sifter frame placement failed");
             var block = (SifterBlockEntity) helper.getLevel().getBlockEntity(pos);
             machines[choice] = block;
             var installed = KineticVariantBehaviour.get(block);
-            helper.assertTrue(installed != null && installed.settings() != null && installed.rate() == (choice == 0 ? .75 : 1),
-                "Crafted Sifter frame did not transfer onto native machine");
+            helper.assertTrue(installed != null && installed.settings() != null
+                && Math.abs(installed.rate() - (choice == 0 ? .85 : 1)) < 1e-6,
+                "Crafted Sifter frame did not transfer onto native machine: choice=" + choice
+                    + " built=" + SettingsNbt.read(item.getTag(), "createsifter:sifter")
+                    + " installed=" + (installed == null ? "no behaviour" : installed.settings()));
             var restored = block.getType().create(pos, block.getBlockState()); restored.setLevel(helper.getLevel());
             restored.load(block.saveWithFullMetadata());
             helper.assertTrue(KineticVariantBehaviour.get(restored).rate() == installed.rate(), "Native Sifter save/load lost frame");
@@ -93,7 +101,7 @@ public final class Wave2CreateSifterTests {
         helper.runAtTickTime(10, () -> {
             helper.assertTrue(Math.abs(machines[0].getSpeed()) == 32 && Math.abs(machines[1].getSpeed()) == 32,
                 "Native frame machines received no kinetic supply");
-            helper.assertTrue(Math.abs(machines[0].calculateStressApplied() / machines[1].calculateStressApplied() - .75) < .001,
+            helper.assertTrue(Math.abs(machines[0].calculateStressApplied() / machines[1].calculateStressApplied() - .85) < .001,
                 "Native frame work changed without paying proportional stress");
             for (var block : machines) block.inputInv.setStackInSlot(0, new ItemStack(Items.CACTUS));
         });
@@ -117,10 +125,10 @@ public final class Wave2CreateSifterTests {
     public static void brassUpgradeInheritsCoreWithoutStackedBonus(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("createsifter") && ModList.get().isLoaded("tconstruct"),
             "Real Sifter/TConstruct dependencies are required");
-        var core = craft(helper, "sifter", "tconstruct:wood#oak", ItemStack.EMPTY);
+        var core = craft(helper, "sifter", "tconstruct:slimewood", ItemStack.EMPTY);
         var brass = craft(helper, "brass_sifter", "tconstruct:iron", core);
         var inherited = SettingsNbt.read(brass.getTag(), "createsifter:brass_sifter");
-        helper.assertTrue(inherited != null && Math.abs(inherited.rate() - ((.75 + 1 + 1) / 3)) < .001,
+        helper.assertTrue(inherited != null && Math.abs(inherited.rate() - ((.85 + 1 + 1) / 3)) < .001,
             "Brass native upgrade dropped predecessor rating or stacked free throughput");
         var baseline = craft(helper, "brass_sifter", "tconstruct:iron",
             new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("createsifter:sifter"))));

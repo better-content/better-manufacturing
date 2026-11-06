@@ -74,10 +74,13 @@ public final class Wave2PneuProcessHeatTests {
     public static void cheapMaterialChangesNativeConductanceWithoutChangingHeatOrDrops(GameTestHelper helper) {
         for (String mod : List.of("pneumaticcraft", "tconstruct"))
             helper.assertTrue(ModList.get().isLoaded(mod), "Required real mod absent: " + mod);
-        var wood = pipe(helper, "tconstruct:wood");
+        // Pack wood head=null cannot form the plate. Pinned slimewood head
+        // mining speed 4 vs iron 6 yields the same bounded 0.75 thermal rate.
+        var wood = pipe(helper, "tconstruct:slimewood");
         var iron = pipe(helper, "tconstruct:iron");
         var woodSettings = SettingsNbt.read(wood.getTag(), PIPE.toString());
-        helper.assertTrue(Math.abs(woodSettings.properties().get("thermal_transfer") - .75) < .001, "Cheap wood pipe not rated");
+        helper.assertTrue(Math.abs(woodSettings.properties().get("thermal_transfer") - .75) < .001,
+            "Eligible slower native head did not rate heat pipe");
         var woodPipe = placed(helper, 2, wood);
         var ironPipe = placed(helper, 5, iron);
         double woodResistance = woodPipe.getHeatExchanger(Direction.UP).getThermalResistance();
@@ -102,13 +105,12 @@ public final class Wave2PneuProcessHeatTests {
     @GameTest(template = "wave2_pneu_process_workshop")
     public static void malformedOrWrongOutputInstalledPipeUsesNativeBaseline(GameTestHelper helper) {
         helper.assertTrue(ModList.get().isLoaded("pneumaticcraft"), "Required real PNCR absent");
-        var rated = pipe(helper, "tconstruct:wood");
+        var rated = pipe(helper, "tconstruct:slimewood");
         rated.getTag().getCompound(SettingsNbt.KEY).putInt("version", 999);
         var malformed = placed(helper, 2, rated);
         var baseline = placed(helper, 5, new ItemStack(ForgeRegistries.ITEMS.getValue(PIPE)));
-        var wrongStack = pipe(helper, "tconstruct:wood");
-        SettingsNbt.write(wrongStack.getOrCreateTag(), new com.bettercontent.manufacturing.api.MachineSettings(
-            "pneumaticcraft:heat_sink", java.util.Map.of("thermal_transfer", .75), java.util.Map.of(), null));
+        var wrongStack = pipe(helper, "tconstruct:slimewood");
+        wrongStack.getTag().getCompound(SettingsNbt.KEY).putString("output", "pneumaticcraft:heat_sink");
         var wrongOutput = placed(helper, 8, wrongStack);
         double nativeResistance = baseline.getHeatExchanger(Direction.UP).getThermalResistance();
         for (var block : List.of(malformed, wrongOutput)) {

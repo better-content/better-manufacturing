@@ -22,6 +22,15 @@ public final class ManufacturingRecipes {
     public static final RegistryObject<RecipeSerializer<MeshRetoolingRecipe>> MESH_RETOOL = SERIALIZERS.register("retool_mesh_frame",
         () -> new net.minecraft.world.item.crafting.SimpleCraftingRecipeSerializer<>(MeshRetoolingRecipe::new));
     public static final RegistryObject<RecipeSerializer<PartVariantRecipe>> VARIANT = SERIALIZERS.register("part_variant", PartVariantSerializer::new);
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.pneumatictools.PneuDrillBitSourceRecipe>> PNEU_DRILL_BIT_SOURCE =
+        net.minecraftforge.fml.ModList.get().isLoaded("pneumaticcraft") ? SERIALIZERS.register("pneu_drill_bit_source", com.bettercontent.manufacturing.integration.pneumatictools.PneuDrillBitSourceRecipe.Serializer::new) : null;
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.pneumatictools.PneuNativeCostBundleRecipe>> PNEU_NATIVE_COST_BUNDLE =
+        net.minecraftforge.fml.ModList.get().isLoaded("pneumaticcraft") ? SERIALIZERS.register("pneu_native_cost_bundle", com.bettercontent.manufacturing.integration.pneumatictools.PneuNativeCostBundleRecipe.Serializer::new) : null;
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.sophisticatedstorage.SophisticatedCostBundleRecipe>> SOPHISTICATED_COST_BUNDLE =
+        net.minecraftforge.fml.ModList.get().isLoaded("sophisticatedstorage") || net.minecraftforge.fml.ModList.get().isLoaded("sophisticatedbackpacks")
+            ? SERIALIZERS.register("sophisticated_cost_bundle", com.bettercontent.manufacturing.integration.sophisticatedstorage.SophisticatedCostBundleRecipe.Serializer::new) : null;
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.createbulk.MechanicalPartVariantRecipe>> MECHANICAL_PART_VARIANT =
+        net.minecraftforge.fml.ModList.get().isLoaded("create") ? SERIALIZERS.register("mechanical_part_variant", com.bettercontent.manufacturing.integration.createbulk.MechanicalPartVariantRecipe.Serializer::new) : null;
     // Create mechanical crafting classes are absent in the optional no-Create fixture.
     public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.createbulk.BulkWheelRecipe>> BULK_WHEEL_VARIANT =
         net.minecraftforge.fml.ModList.get().isLoaded("create") ? SERIALIZERS.register("bulk_wheel_variant", com.bettercontent.manufacturing.integration.createbulk.BulkWheelRecipe.Serializer::new) : null;
@@ -31,9 +40,15 @@ public final class ManufacturingRecipes {
     public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.powergrid.PowergridMechanicalRecipe>> POWERGRID_MECHANICAL_VARIANT =
         net.minecraftforge.fml.ModList.get().isLoaded("create") && net.minecraftforge.fml.ModList.get().isLoaded("powergrid")
             ? SERIALIZERS.register("powergrid_mechanical_variant", com.bettercontent.manufacturing.integration.powergrid.PowergridMechanicalRecipe.Serializer::new) : null;
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.prettypipes.PrettyPipesMechanicalRecipe>> PRETTY_PIPES_MECHANICAL =
+        net.minecraftforge.fml.ModList.get().isLoaded("create") && net.minecraftforge.fml.ModList.get().isLoaded("prettypipes")
+            ? SERIALIZERS.register("prettypipes_mechanical", com.bettercontent.manufacturing.integration.prettypipes.PrettyPipesMechanicalRecipe.Serializer::new) : null;
     public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.clockwork.ClockworkMechanicalRecipe>> CLOCKWORK_MECHANICAL =
         net.minecraftforge.fml.ModList.get().isLoaded("create") && net.minecraftforge.fml.ModList.get().isLoaded("vs_clockwork")
             ? SERIALIZERS.register("clockwork_mechanical", () -> com.bettercontent.manufacturing.integration.clockwork.ClockworkMechanicalRecipe.Serializer.INSTANCE) : null;
+    public static final RegistryObject<RecipeSerializer<com.bettercontent.manufacturing.integration.clockwork.ClockworkBladeCuttingPrep>> CLOCKWORK_BLADE_CUTTING_PREP =
+        net.minecraftforge.fml.ModList.get().isLoaded("create") && net.minecraftforge.fml.ModList.get().isLoaded("vs_clockwork")
+            ? SERIALIZERS.register("clockwork_blade_cutting_prep", com.bettercontent.manufacturing.integration.clockwork.ClockworkBladeCuttingPrep.Serializer::new) : null;
     private ManufacturingRecipes() {}
     public static final class ShapelessSerializer implements RecipeSerializer<MaterialShapelessRecipe> {
         private final net.minecraft.world.item.crafting.ShapelessRecipe.Serializer vanilla = new net.minecraft.world.item.crafting.ShapelessRecipe.Serializer();

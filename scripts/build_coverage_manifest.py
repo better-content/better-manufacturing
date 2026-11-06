@@ -9,8 +9,12 @@ import sys
 import tomllib
 from zipfile import ZipFile
 
-DEFERRED_IDS = {'sophisticatedbackpacks:hopper_upgrade', 'sophisticatedbackpacks:advanced_hopper_upgrade',
-                'vs_clockwork:gas_tank', 'vs_clockwork:gas_vent', 'vs_clockwork:sealer'}
+ORIGINAL_DEFERRED_IDS = {'sophisticatedbackpacks:hopper_upgrade', 'sophisticatedbackpacks:advanced_hopper_upgrade',
+                         'vs_clockwork:gas_tank', 'vs_clockwork:gas_vent', 'vs_clockwork:sealer'}
+NEW_DEFERRED_IDS = {'vs_clockwork:brass_redstone_resistor', 'vs_clockwork:combustion_engine',
+                    'pneumaticcraft:electric_compressor'}
+CLOSED_DEFERRED_IDS = {'createsifter:advanced_brass_mesh'}
+DEFERRED_IDS = ORIGINAL_DEFERRED_IDS | NEW_DEFERRED_IDS
 GROUPS = []
 def group(namespace, family, ids, role, parts, effects, milestone=4, disposition='material_dependent'):
     GROUPS.append((namespace, family, ids.split(), role, parts.split(), effects.split(), milestone, disposition))
@@ -22,7 +26,8 @@ group('create', 'field_work', 'mechanical_harvester mechanical_plough', 'working
 group('create', 'mixing', 'mechanical_mixer whisk', 'whisk', 'tool_handle tough_handle', 'mixing_rate load')
 group('create', 'airflow', 'encased_fan propeller', 'rotor', 'small_blade broad_blade', 'airflow load')
 group('create', 'fluid_transfer', 'mechanical_pump hose_pulley portable_fluid_interface', 'wetted_fitting', 'large_plate', 'transfer_rate chemical_compatibility')
-group('create', 'fluid_envelope', 'basin spout item_drain fluid_pipe encased_fluid_pipe glass_fluid_pipe smart_fluid_pipe fluid_valve fluid_tank', 'liner', 'large_plate', 'chemical_compatibility thermal_envelope', 2)
+group('create', 'fluid_envelope', 'basin spout item_drain fluid_pipe encased_fluid_pipe glass_fluid_pipe fluid_valve fluid_tank', 'liner', 'large_plate', 'chemical_compatibility thermal_envelope', 2)
+group('create', 'fluid_envelope', 'smart_fluid_pipe', 'construction', 'large_plate', '', 2, 'recipe_only')
 group('create', 'steam_engine', 'steam_engine', 'piston_rod', 'tough_handle', 'conversion mechanical_limit')
 group('create', 'launcher', 'weighted_ejector', 'spring', 'bow_limb', 'recharge_rate launch_envelope')
 group('createsifter', 'sifting', 'sifter brass_sifter string_mesh andesite_mesh zinc_mesh brass_mesh advanced_brass_mesh', 'screen_frame', 'tool_handle tough_handle', 'sifting_rate', 2)
@@ -47,7 +52,7 @@ for family in ['processing', 'speed', 'efficiency', 'extraction']:
     group('complicated_bees', 'gyrofuge_' + family,
           ' '.join('gyrofuge_' + prefix + family + '_unit' for prefix in ['basic_', '', 'advanced_']),
           'working_assembly', 'tough_handle large_plate', 'process_rate energy_rate', 5)
-group('complicated_bees', 'environment_control', 'mellarium_temp_unit mellarium_hydroregulator', 'working_assembly', 'large_plate', 'control_rate energy_rate', 5)
+group('complicated_bees', 'environment_control', 'mellarium_temp_unit mellarium_hydroregulator', 'construction', 'tool_handle', '', 5, 'recipe_only')
 for family in ['speed', 'extraction']:
     group('prettypipes', family, ' '.join(grade + '_' + family + '_module' for grade in ['low', 'medium', 'high']), 'actuator', 'tool_handle', 'transfer_rate', 5)
 group('prettypipes', 'pressurizer', 'pressurizer', 'working_assembly', 'tough_handle', 'transfer_rate resource_rate', 5)
@@ -61,13 +66,15 @@ for family, effects in [('high_speed_governor', 'speed_limit'), ('exhaust_recupe
 group('better_rail_beetle', 'drives', 'better_rail_beetle steam_drive flux_traction_motor source_impeller lifeforce_ram pneumatic_expansion_motor soul_combustor spirit_warping_engine', 'working_assembly', 'tough_handle large_plate', 'drive_performance', 5)
 group('littlelogistics', 'propulsion', 'tug energy_tug steam_locomotive energy_locomotive', 'working_assembly', 'tough_handle', 'drive_performance consumption', 5)
 group('trackwork', 'running_gear', 'simple_wheel med_simple_wheel large_simple_wheel small_simple_wheel suspension_track med_suspension_track large_suspension_track phys_track med_phys_track large_phys_track oleo_wheel', 'hub_suspension', 'tough_handle bow_limb', 'mechanical_load suspension_response', 6)
-group('vs_clockwork', 'flight_actuators', 'brass_propeller_bearing copter_bearing juryrigged_propeller_bearing propeller_blade wide_propeller_blade reactionwheel andesite_flap_bearing smart_flap_bearing blade_controller gyro', 'working_assembly', 'tough_handle broad_blade', 'mechanical_limit actuator_response', 6)
-group('vs_clockwork', 'gas_thermal', 'air_compressor duct pump_duct valve_duct gas_nozzle gas_vent gas_tank gas_heater gas_engine gas_thruster combustion_engine coal_burner steam_generator exhaust sealer', 'working_assembly', 'large_plate tough_handle', 'transfer_rate conversion thermal_envelope', 6)
+group('vs_clockwork', 'flight_actuators', 'brass_propeller_bearing copter_bearing juryrigged_propeller_bearing propeller_blade wide_propeller_blade reactionwheel andesite_flap_bearing smart_flap_bearing gyro', 'working_assembly', 'tough_handle broad_blade', 'mechanical_limit actuator_response', 6)
+group('vs_clockwork', 'gas_thermal', 'air_compressor duct pump_duct valve_duct gas_nozzle gas_vent gas_tank gas_engine gas_thruster combustion_engine coal_burner exhaust sealer', 'working_assembly', 'large_plate tough_handle', 'transfer_rate conversion thermal_envelope', 6)
 group('vs_eureka', 'engine', 'engine', 'working_assembly', 'tough_handle', 'drive_performance consumption', 6)
 
 # Recipe-only neighbors. They must not grow material-derived information capacity or control behavior.
 def recipe(ns, family, ids, parts='tool_handle large_plate'):
     group(ns, family, ids, 'construction', parts, '', 6, 'recipe_only')
+recipe('vs_clockwork', 'flight_actuators', 'blade_controller', 'tough_handle broad_blade')
+recipe('vs_clockwork', 'gas_thermal', 'gas_heater steam_generator', 'large_plate tough_handle')
 recipe('create', 'transmission', 'shaft cogwheel large_cogwheel andesite_encased_shaft brass_encased_shaft andesite_encased_cogwheel brass_encased_cogwheel andesite_encased_large_cogwheel brass_encased_large_cogwheel metal_girder_encased_shaft gearbox vertical_gearbox clutch gearshift encased_chain_drive adjustable_chain_gearshift rotation_speed_controller sequenced_gearshift')
 recipe('create', 'mechanisms', 'mechanical_bearing clockwork_bearing mechanical_piston sticky_mechanical_piston piston_extension_pole gantry_carriage gantry_shaft rope_pulley elevator_pulley linear_chassis secondary_linear_chassis radial_chassis')
 recipe('create', 'primitive_power', 'hand_crank water_wheel large_water_wheel windmill_bearing sail_frame', 'tool_handle tool_binding')
@@ -137,8 +144,10 @@ def generate(pack, cache):
             if any(e['id'] == identity for e in entries): raise ValueError('duplicate ' + identity)
             candidates = [f'assets/{ns}/models/item/{item}.json', f'assets/{ns}/blockstates/{item}.json']
             entries.append({'id':identity, 'family':ns + '/' + family, 'disposition':disposition, 'milestone':milestone,
-                'roles':{role:['tconstruct:' + p for p in parts]}, 'derived_properties':effects,
-                'native_recipe_ids':sorted(recipes.get(identity, [])), 'pack_recipe_ids':[],
+                'roles':{role:['tconstruct:' + p for p in parts]},
+                'derived_properties':(['fluid_capacity'] if identity in {'create:basin', 'create:fluid_tank'} else effects),
+                'native_recipe_ids':sorted(recipes.get(identity, [])),
+                'pack_recipe_ids':(['kubejs:powered_works/workshop/basin'] if identity == 'create:basin' else []),
                 'asset_evidence':[p for p in candidates if p in archives[ns]],
                 'adapter':('better_manufacturing:' + ns + '/' + family) if disposition == 'material_dependent' else None,
                 'status':'pending', 'acquisition_audit':'pending', 'native_reference_audit':'pending',
@@ -147,12 +156,27 @@ def generate(pack, cache):
         if entry['id'] in DEFERRED_IDS:
             entry['disposition'] = 'excluded'
             entry['exclusion_reason'] = 'user_deferred_unconfirmed_identity'
+        elif entry['id'] in CLOSED_DEFERRED_IDS:
+            entry['disposition'] = 'excluded'
+            entry['exclusion_reason'] = 'user_deferred_closed_acquisition'
     return {'schema':'better_manufacturing.coverage.v1', 'completion_requires_full_roster':True,
         'new_component_ceiling':12, 'planned_component_ids':['better_manufacturing:' + p for p in
         ['pla_stock','pp_stock','lactide','propylene','tin_carboxylate_catalyst','supported_dehydrogenation_catalyst','coordination_polymerisation_catalyst']],
         'sources':sources, 'entries':sorted(entries, key=lambda e:e['id']),
-        'selection_findings':[{'kind':'missing_asset_evidence', 'ids':sorted(DEFERRED_IDS),
-            'status':'user_deferred', 'note':'User explicitly deferred these five unconfirmed IDs and requested completion of the remaining roster. They are not implemented, verified, or replaced with other machines.'}],
+        'selection_findings':[{'kind':'missing_asset_evidence', 'ids':sorted(ORIGINAL_DEFERRED_IDS),
+            'status':'user_deferred', 'note':'User explicitly deferred the original five unconfirmed IDs; they are not implemented or replaced.'},
+            {'kind':'user_deferred_unconfirmed_identity', 'ids':sorted(NEW_DEFERRED_IDS),
+             'status':'user_deferred', 'note':'User later deferred these three after source/JAR inspection; loaded registry absence is unverified and no replacements are approved.'},
+            {'kind':'user_deferred_closed_acquisition', 'ids':sorted(CLOSED_DEFERRED_IDS),
+             'status':'user_deferred', 'note':'User deferred the selected advanced brass mesh whose pack recipe remains closed; it is not implemented or replaced.'},
+            {'kind':'unresolved_registered_without_survival_acquisition',
+             'ids':['compressedcreativity:heater', 'vs_clockwork:copter_bearing'], 'status':'unresolved',
+             'note':'User retains both selected IDs; source/JAR inspection found registration but no survival acquisition. Loaded-route evidence and a justified resolution remain required.'},
+            {'kind':'unresolved_native_single_input_partless_output', 'ids':['pneumaticcraft:upgrade_matrix'],
+             'status':'unresolved', 'note':'Pinned one-item thermo route was part-free; an approved owner-local Pneu46 fixture now passes the BM-conditional plate-paid lapis native cycle. Alternate acquisition, no-BM loaded fallback, client and full-pack acceptance remain pending.'},
+            {'kind':'unresolved_registered_without_survival_acquisition',
+             'ids':['oc2r:internet_gateway', 'oc2r:monitor'], 'status':'unresolved',
+             'note':'Pinned OC2R registers both devices but has no recipe, loot grant or native transform for them in inspected JAR/pack inputs; user retains them in the active roster.'}],
         'excluded_families':['creative_and_internal_helpers','quarantined_content','tconstruct_bootstrap','primitive_survival',
         'cooking','decorative_construction','ordinary_storage_capacity','magic_progression','ecology_and_genetics',
         'weapons_and_armour','specialist_encounters','environmental_pumps','creatingspace','experimental_spaceflight'],

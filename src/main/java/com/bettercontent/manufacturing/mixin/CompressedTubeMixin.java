@@ -69,7 +69,7 @@ public final class CompressedTubeMixin {
             var id = ForgeRegistries.ITEMS.getKey(nativeTube.getItem());
             if (id == null || !id.getNamespace().equals("pneumaticcraft")) return;
             double envelope = previous.properties().get("pressure_envelope");
-            SettingsNbt.write(nativeTube.getOrCreateTag(), new MachineSettings(id.toString(), java.util.Map.of("pressure_envelope", envelope), previous.materials(), null));
+            SettingsNbt.write(nativeTube.getOrCreateTag(), SettingsNbt.inherit(id.toString(), "pressure_envelope", previous));
         }
         @Inject(method = "getRequiredItems", at = @At("RETURN"), cancellable = true)
         private void manufacturing$schematicConfiguredNativeTube(BlockState state, net.minecraft.world.level.block.entity.BlockEntity entity,
@@ -104,8 +104,8 @@ public final class CompressedTubeMixin {
             var settings = SettingsNbt.read(tube.saveWithoutMetadata(), sourceId.toString());
             if (!manufacturing$validEnvelope(settings)) return;
             double envelope = settings.properties().get("pressure_envelope");
-            SettingsNbt.write(result.getReturnValue().getOrCreateTag(), new MachineSettings(outputId.toString(),
-                java.util.Map.of("pressure_envelope", envelope), settings.materials(), null));
+            SettingsNbt.write(result.getReturnValue().getOrCreateTag(),
+                SettingsNbt.inherit(outputId.toString(), "pressure_envelope", settings));
         }
         @Redirect(method = "usingBracketOnPressureTube", at = @At(value = "INVOKE", target = "Lcom/lgmrszd/compressedcreativity/index/CCMisc;setBlockAndUpdateKeepAir(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)V"))
         private static void manufacturing$carryConfiguredTube(Level level, BlockPos pos, BlockState target) {
@@ -117,7 +117,7 @@ public final class CompressedTubeMixin {
             if (!manufacturing$validEnvelope(source) || targetId == null || !targetId.getNamespace().equals("compressedcreativity")) return;
             double envelope = source.properties().get("pressure_envelope");
             var result = new net.minecraft.nbt.CompoundTag();
-            SettingsNbt.write(result, new MachineSettings(targetId.toString(), java.util.Map.of("pressure_envelope", envelope), source.materials(), null));
+            SettingsNbt.write(result, SettingsNbt.inherit(targetId.toString(), "pressure_envelope", source));
             var variant = CompressedVariant.get(level.getBlockEntity(pos));
             if (variant == null && level.getBlockEntity(pos) instanceof com.simibubi.create.foundation.blockEntity.SmartBlockEntity smart) {
                 variant = new CompressedVariant(smart); smart.attachBehaviourLate(variant);

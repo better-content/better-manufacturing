@@ -3,6 +3,7 @@ package com.bettercontent.manufacturing.mixin;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import com.bettercontent.manufacturing.recipe.PartVariantRecipe;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -37,9 +38,20 @@ public abstract class ClockworkBladeFinishingMixin {
         if (blank.isEmpty()) { callback.setReturnValue(ItemStack.EMPTY); return; }
         var settings = SettingsNbt.read(finished.getTag(), output);
         if (settings == null) { callback.setReturnValue(ItemStack.EMPTY); return; }
+        // A newly crafted or saw-cut stock blade has Clockwork's implicit length of one.
+        // A present length must be valid; never turn a damaged or malformed blade into one.
+        var nativeTag = blank.getTag();
+        boolean hasLength = nativeTag != null && nativeTag.contains("BladeLength");
+        if (hasLength && (!nativeTag.contains("BladeLength", Tag.TAG_ANY_NUMERIC)
+            || !Double.isFinite(nativeTag.getDouble("BladeLength"))
+            || nativeTag.getDouble("BladeLength") <= 0)) {
+            callback.setReturnValue(ItemStack.EMPTY);
+            return;
+        }
         // Native cutting and assembly encode the actual physical length on the blade item.
         // Preserve that tag and any native metadata; replace only Manufacturing's final rating.
-        if (blank.hasTag()) finished.setTag(blank.getTag().copy());
+        if (nativeTag != null) finished.setTag(nativeTag.copy());
+        if (!hasLength) finished.getOrCreateTag().putDouble("BladeLength", 1);
         SettingsNbt.write(finished.getOrCreateTag(), settings);
     }
 }

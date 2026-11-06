@@ -28,6 +28,6 @@ public abstract class CompressedMeshAssemblyMixin {
         if (existing == null || !existing.properties().keySet().equals(java.util.Set.of("airflow"))) return;
         double flow = existing.properties().get("airflow");
         if (!Double.isFinite(flow) || flow < .75 || flow > 1.5) return;
-        SettingsNbt.write(output.getOrCreateTag(), new MachineSettings(outputId.toString(), java.util.Map.of("airflow", flow), existing.materials(), null));
+        SettingsNbt.write(output.getOrCreateTag(), SettingsNbt.inherit(outputId.toString(), "airflow", existing));
     }
 }

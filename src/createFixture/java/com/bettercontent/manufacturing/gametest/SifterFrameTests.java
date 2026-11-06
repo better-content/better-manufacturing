@@ -38,18 +38,25 @@ public final class SifterFrameTests {
     private static int count(SifterBlockEntity block,Item item) { int n=0; for(int i=0;i<block.outputInv.getSlots();i++) if(block.outputInv.getStackInSlot(i).is(item)) n+=block.outputInv.getStackInSlot(i).getCount(); return n; }
     @GameTest(template="drill_workshop",timeoutTicks=220)
     public static void ratesPreserveNativeAssayAndWetIdentity(GameTestHelper helper) {
-        for(String kind:List.of("string","andesite","zinc","brass")) for(String material:List.of("tconstruct:wood","tconstruct:iron")) mesh(helper,kind,material);
-        var wood=machine(helper,2,mesh(helper,"string","tconstruct:wood"),false);
+        for(String kind:List.of("string","andesite","zinc","brass")) for(String material:List.of("tconstruct:wood","tconstruct:slimewood","tconstruct:iron")) mesh(helper,kind,material);
+        // Pinned native TCon wood and iron handles both have 0 mining-speed modifier.
+        // Slimewood's -0.15 is a real contrast against iron's 0, not an authored machine bonus.
+        var slow=machine(helper,2,mesh(helper,"string","tconstruct:slimewood"),false);
         var iron=machine(helper,6,mesh(helper,"string","tconstruct:iron"),false);
         var wet=machine(helper,10,mesh(helper,"string","tconstruct:copper"),true);
         helper.runAtTickTime(10,()->{
-            helper.assertTrue(Math.abs(wood.getSpeed())==32 && Math.abs(iron.getSpeed())==32,"No native kinetic power");
-            helper.assertTrue(Math.abs(wood.calculateStressApplied()/iron.calculateStressApplied()-.75)<.001,"Stress differs from work multiplier");
-            for(var block:List.of(wood,iron,wet)) block.inputInv.setStackInSlot(0,new ItemStack(Items.CACTUS));
+            helper.assertTrue(Math.abs(slow.getSpeed())==32 && Math.abs(iron.getSpeed())==32,"No native kinetic power");
+            helper.assertTrue(Math.abs(((ScreenAccess) slow).manufacturing$screenState().rate()-.85)<.001
+                    && Math.abs(((ScreenAccess) iron).manufacturing$screenState().rate()-1)<.001
+                    && Math.abs(slow.calculateStressApplied()/iron.calculateStressApplied()-.85)<.001,
+                "Stress differs from baked native handle work: stress=" + slow.calculateStressApplied() + "/" + iron.calculateStressApplied()
+                    + " state=" + ((ScreenAccess) slow).manufacturing$screenState().rate() + "/"
+                    + ((ScreenAccess) iron).manufacturing$screenState().rate());
+            for(var block:List.of(slow,iron,wet)) block.inputInv.setStackInSlot(0,new ItemStack(Items.CACTUS));
         });
-        helper.runAtTickTime(100,()->helper.assertTrue(iron.inputInv.getStackInSlot(0).isEmpty() && !wood.inputInv.getStackInSlot(0).isEmpty(),"Settings did not change actual completion time"));
+        helper.runAtTickTime(100,()->helper.assertTrue(iron.inputInv.getStackInSlot(0).isEmpty() && !slow.inputInv.getStackInSlot(0).isEmpty(),"Settings did not change actual completion time"));
         helper.runAtTickTime(140,()->{
-            for(var block:List.of(wood,iron)) helper.assertTrue(count(block,Items.COAL)==2 && count(block,Items.FLINT)==2,"Material changed native output");
+            for(var block:List.of(slow,iron)) helper.assertTrue(count(block,Items.COAL)==2 && count(block,Items.FLINT)==2,"Material changed native output");
             helper.assertTrue(count(wet,Items.CLAY_BALL)==2 && count(wet,Items.COAL)==0,"Native wet recipe was changed or blocked by an added qualification"); helper.succeed();
         });
     }

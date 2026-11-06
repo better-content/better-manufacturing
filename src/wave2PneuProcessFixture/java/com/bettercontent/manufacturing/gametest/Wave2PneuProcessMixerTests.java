@@ -82,7 +82,9 @@ public final class Wave2PneuProcessMixerTests {
             .orElseThrow(() -> new AssertionError("Native PNCR water/lava->obsidian mixer recipe missing"));
         helper.assertTrue(recipe instanceof me.desht.pneumaticcraft.api.crafting.recipe.FluidMixerRecipe,
             "Native PNCR fluid recipe serializer changed");
-        var wood = mixer(helper, 2, mixerItem(helper, "tconstruct:wood"));
+        // Slimewood is a real eligible head (speed 4 versus iron 6); pack
+        // wood explicitly has no head and cannot supply this large plate.
+        var wood = mixer(helper, 2, mixerItem(helper, "tconstruct:slimewood"));
         var iron = mixer(helper, 5, mixerItem(helper, "tconstruct:iron"));
         var unpowered = mixer(helper, 8, new ItemStack(ForgeRegistries.ITEMS.getValue(ID)));
         helper.assertTrue(Math.abs(PneuProcessNative.rate(wood, "process_rate") - Math.sqrt(.75)) < .001

@@ -27,7 +27,17 @@ val withCreate = !providers.gradleProperty("withoutCreate").map(String::toBoolea
 val createCoordinate = "com.simibubi.create:create-1.20.1:6.0.8-289:slim"
 val createUpstream by configurations.creating { isTransitive = false }
 val nativeProfile = providers.gradleProperty("manufacturingNativeProfile").getOrElse("core")
-require(nativeProfile in setOf("core", "create", "create_bumblezone", "fluids", "pneu")) { "Unknown Manufacturing native profile: $nativeProfile" }
+// Opt-in catalogue GameTests leave existing native populations untouched.
+// Example (after source authoring): ./gradlew -PmanufacturingNativeProfile=catalogue
+// -PmanufacturingCatalogueFixture=true runGameTestServer. For create/pneu, pass the
+// existing profile's base -PmanufacturingNativeTestCount; the fixture adds 1 (or 4
+// for catalogue) to the required total and receipt automatically.
+val catalogueFixtureEnabled = providers.gradleProperty("manufacturingCatalogueFixture").map(String::toBooleanStrict).getOrElse(false)
+require(!catalogueFixtureEnabled || nativeProfile in setOf("create", "create_powergrid", "pneu", "catalogue")) {
+    "Catalogue native fixtures require a supported optional-owner profile"
+}
+require(nativeProfile != "catalogue" || catalogueFixtureEnabled) { "Catalogue profile requires -PmanufacturingCatalogueFixture=true" }
+require(nativeProfile in setOf("core", "create", "create_bumblezone", "create_powergrid", "fluids", "pneu", "catalogue")) { "Unknown Manufacturing native profile: $nativeProfile" }
 val packRoot = file("../../better-content-modpack/kubejs")
 val upstreamCache = providers.environmentVariable("BC_UPSTREAM_MOD_DIR")
     .getOrElse(file("../../.cache/bc/packwiz-downloads/mods").absolutePath)
@@ -70,6 +80,22 @@ val verifyDevAdpotherMapped by tasks.registering {
         else output.writeText(record)
         println("DEV_ADPOTHER_SINGLE_MAPPED_DEPENDENCY=${mapped.absolutePath} SHA256=$hash")
     }
+}
+// Required Bumblezone userdev profile only: pin the original and ForgeGradle-mapped
+// inputs, then remap stale SRG mixin selector strings in an isolated generated JAR.
+val devBumblezoneRoot = layout.buildDirectory.dir("generated/dev-bumblezone-userdev")
+val pinnedBumblezone = file("$upstreamCache/the_bumblezone-7.13.4+1.20.1-forge.jar")
+val mappedBumblezone = gradle.gradleUserHomeDir.resolve(
+    "caches/forge_gradle/deobf_dependencies/local/the_bumblezone/7.13.4+1.20.1-forge_mapped_official_1.20.1/the_bumblezone-7.13.4+1.20.1-forge_mapped_official_1.20.1.jar")
+val devBumblezoneJar = devBumblezoneRoot.map { it.file("the_bumblezone-7.13.4+1.20.1-forge-userdev-selectors.jar") }
+val prepareDevBumblezoneUserdev by tasks.registering(Exec::class) {
+    dependsOn("createSrgToMcp")
+    inputs.files(pinnedBumblezone, mappedBumblezone, file("build/createSrgToMcp/output.srg"),
+        file("scripts/prepare_bumblezone_userdev.py"))
+    outputs.upToDateWhen { false } // Validate immutable hashes and the complete generated artifact each run.
+    commandLine("python3", "-B", "scripts/prepare_bumblezone_userdev.py", pinnedBumblezone.absolutePath,
+        mappedBumblezone.absolutePath, file("build/createSrgToMcp/output.srg").absolutePath,
+        devBumblezoneRoot.get().asFile.absolutePath)
 }
 val pinnedApis = layout.buildDirectory.dir("generated/embedded-apis")
 val extractEmbeddedApis by tasks.registering(Exec::class) {
@@ -139,6 +165,8 @@ val fluidOwnerMixins = listOf(
 val wave2SourceSetName = when (nativeProfile) {
     "create" -> "wave2NativeCreate"
     "create_bumblezone" -> "wave2NativeBumblezone"
+    "create_powergrid" -> "wave2NativePowergrid"
+    "catalogue" -> "wave2NativeCatalogue"
     "fluids" -> "wave2NativeFluids"
     "pneu" -> "wave2NativePneu"
     else -> "wave2NativeCore"
@@ -146,12 +174,16 @@ val wave2SourceSetName = when (nativeProfile) {
 val wave2Fixture = sourceSets.create(wave2SourceSetName) {
     val families = when (nativeProfile) {
         "create", "create_bumblezone" -> listOf("wave2CreateFixture")
+        "create_powergrid" -> listOf("wave2CreateFixture", "wave2PowergridFixture")
+        "catalogue" -> listOf("catalogueOptionalFixture")
         "fluids" -> listOf("wave2FluidsHeatFixture")
         "pneu" -> listOf("wave2PneuMechanicsFixture", "wave2PneuProcessFixture")
         else -> emptyList()
     }
-    java.setSrcDirs(families.map { "src/$it/java" })
-    if (nativeProfile == "create") java.exclude("**/Wave2CreateHarvesterTests.java")
+    java.setSrcDirs(families.map { "src/$it/java" } + if (catalogueFixtureEnabled && nativeProfile != "catalogue") listOf(
+        if (nativeProfile == "pneu") "src/cataloguePneuFixture/java" else "src/catalogueCreateFixture/java"
+    ) else emptyList())
+    if (nativeProfile in setOf("create", "create_powergrid")) java.exclude("**/Wave2CreateHarvesterTests.java")
     resources.setSrcDirs(families.map { "src/$it/resources" })
     compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath + createFixture.output + createFixture.compileClasspath
     runtimeClasspath += sourceSets.main.get().output + sourceSets.main.get().runtimeClasspath + createFixture.output + createFixture.runtimeClasspath
@@ -169,6 +201,8 @@ val clientFixture by sourceSets.creating {
 require(nativeProfile == "core" || withCreate) { "Wave-two native profiles require Create" }
 val nativeTestCount = providers.gradleProperty("manufacturingNativeTestCount").map(String::toInt).orNull
     ?: if (withCreate) 23 else 11 // 21 wave9 baseline plus two Wave2Core tests
+val catalogueTestCount = if (!catalogueFixtureEnabled) 0 else if (nativeProfile == "catalogue") 4 else 1
+val expectedNativeTestCount = nativeTestCount + catalogueTestCount
 val authoredDrillData = listOf(
     "create/recipes/crafting/kinetics/mechanical_drill.json",
     "create/loot_tables/blocks/mechanical_drill.json",
@@ -217,6 +251,8 @@ tasks.named<ProcessResources>(wave2Fixture.processResourcesTaskName) {
     // Real pack inputs for the selected family, not synthetic fixture registries.
     val roots = when (nativeProfile) {
         "create", "create_bumblezone" -> listOf("create", "createsifter", "better_manufacturing")
+        "create_powergrid" -> listOf("create", "createsifter", "powergrid", "better_manufacturing")
+        "catalogue" -> listOf("create", "vs_clockwork", "complicated_bees", "sophisticatedstorage", "sophisticatedbackpacks", "better_manufacturing")
         "fluids" -> listOf("create", "better_industrial_heat", "better_manufacturing")
         "pneu" -> listOf("pneumaticcraft", "compressedcreativity", "better_manufacturing")
         else -> emptyList()
@@ -308,12 +344,11 @@ dependencies {
             "local:kubejs-forge:2001.6.5-build.16", "local:kubejs-create-forge:2001.3.0-build.8")
             .forEach { runtimeOnly(fg.deobf(it)) }
     }
-    // This pinned mod has no refmap: its obfuscated mixin selectors currently crash
-    // official-mapped userdev before registry loading. Keep a separate REQUIRED
-    // create_bumblezone profile; do not silently drop its harvester positive test.
-    if (nativeProfile == "create_bumblezone") {
-        runtimeOnly(fg.deobf("local:the_bumblezone:7.13.4+1.20.1-forge"))
-    }
+    // The pinned production Bumblezone JAR/cache are read-only. Only this required
+    // userdev profile loads the derived official-mapped selector JAR, with every
+    // original mixin/config and the positive harvester fixture retained.
+    if (nativeProfile == "create_bumblezone") runtimeOnly(files(devBumblezoneJar))
+    if (nativeProfile == "create_powergrid") runtimeOnly(fg.deobf("local:powergrid-mc1.20.1:0.5.4"))
     if (nativeProfile in setOf("pneu", "fluids")) {
         runtimeOnly(fg.deobf("local:pneumaticcraft-repressurized:6.0.22+mc1.20.1"))
     }
@@ -324,6 +359,12 @@ dependencies {
         runtimeOnly(fg.deobf(devAdpotherCoordinate))
     }
     if (nativeProfile == "pneu") runtimeOnly(fg.deobf("local:compressedcreativity:1.20.1-0.2.0-all"))
+    if (nativeProfile == "catalogue") {
+        listOf("local:clockwork:0.5.6", "local:valkyrienskies:120-2.4.11",
+            "local:complicated_bees:1.20.1-3.4.6", "local:sophisticatedstorage:1.20.1-1.4.39.1666",
+            "local:sophisticatedbackpacks:1.20.1-3.24.35.1675", "local:sophisticatedcore:1.20.1-1.3.21.1676",
+            "local:architectury:9.2.14-forge").forEach { runtimeOnly(fg.deobf(it)) }
+    }
     compileOnly(fg.deobf("curse.maven:emi-580555:8081375"))
     if (clientFixtureEnabled) runtimeOnly(fg.deobf("curse.maven:emi-580555:8081375"))
     annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
@@ -414,10 +455,15 @@ val verifySifterFixture by tasks.registering(Exec::class) {
 tasks.named("compileJava") { dependsOn(verifySifterFixture, extractEmbeddedApis, compileIndustrialHeatOwner, compileRailBeetleOwner) }
 if (nativeProfile == "fluids") {
     tasks.named(wave2Fixture.compileJavaTaskName) { dependsOn(compileIndustrialHeatOwner, compileHazardsOwner, compileAirtightOwner) }
-    tasks.named("prepareRunGameTestServer") { dependsOn(verifyDevAdpotherMapped) }
+    // ForgeGradle registers this run preparation task lazily; configure it when present.
+    tasks.matching { it.name == "prepareRunGameTestServer" }.configureEach { dependsOn(verifyDevAdpotherMapped) }
     tasks.matching { it.name == "runGameTestServer" }.configureEach {
         dependsOn(compileIndustrialHeatOwner, compileHazardsOwner, compileAirtightOwner, verifyDevAdpotherMapped)
     }
+}
+if (nativeProfile == "create_bumblezone") {
+    tasks.matching { it.name == "prepareRunGameTestServer" }.configureEach { dependsOn(prepareDevBumblezoneUserdev) }
+    tasks.matching { it.name == "runGameTestServer" }.configureEach { dependsOn(prepareDevBumblezoneUserdev) }
 }
 tasks.register("verifyFast") {
     group = "verification"
@@ -428,7 +474,7 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
     if (withCreate) dependsOn(verifyCreateFixture)
     if (nativeProfile != "core") dependsOn(tasks.named(wave2Fixture.classesTaskName))
     doFirst {
-        if (nativeProfile != "core") check(nativeTestCount > 23) { "Positive $nativeProfile profile requires -PmanufacturingNativeTestCount greater than 23 (21 wave9 + two Wave2Core tests)" }
+        if (nativeProfile != "core") check(expectedNativeTestCount > 23) { "Positive $nativeProfile profile requires more than the 23 core tests (21 wave9 + two Wave2Core tests)" }
         val directory = nativeDirectory.get().asFile
         check(!directory.exists()) { "Refusing reused native fixture: $directory" }
         directory.mkdirs()
@@ -438,6 +484,8 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
                 "startup_scripts/progression/20_transition_items.js",
                 "server_scripts/utility/10_recipe_surface_helpers.js",
                 "server_scripts/progression/20_powered_works.js") +
+                (if (nativeProfile == "create_powergrid") listOf("server_scripts/progression/51_powergrid_cutting.js") else emptyList()) +
+                (if (nativeProfile == "catalogue") listOf("server_scripts/progression/52_clockwork_blade_cutting.js") else emptyList()) +
                 (if (nativeProfile == "pneu") listOf("server_scripts/progression/40_thermal_pressure.js",
                     "server_scripts/progression/81_pneumaticcraft_progression.js",
                     "server_scripts/progression/82_pneumaticcraft_acquisition.js") else emptyList()) +
@@ -453,6 +501,8 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
             directory.resolve("production-scripts.txt").writeText(scripts.joinToString("\n", postfix = "\n"))
             val dataRoots = when (nativeProfile) {
                 "create", "create_bumblezone" -> listOf("create", "createsifter", "better_manufacturing")
+                "create_powergrid" -> listOf("create", "createsifter", "powergrid", "better_manufacturing")
+                "catalogue" -> listOf("create", "vs_clockwork", "complicated_bees", "sophisticatedstorage", "sophisticatedbackpacks", "better_manufacturing")
                 "fluids" -> listOf("create", "better_industrial_heat", "better_manufacturing")
                 else -> listOf("pneumaticcraft", "compressedcreativity", "better_manufacturing")
             }
@@ -460,7 +510,8 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
                 listOf("recipes", "loot_tables").flatMap { kind ->
                     fileTree(packRoot.resolve("data/$root/$kind")).files.toList()
                 }
-            } + packRoot.resolve("data/tconstruct/tinkering/materials/stats/wood.json")).sortedBy { it.absolutePath }
+            } + packRoot.resolve("data/tconstruct/tinkering/materials/stats/wood.json") +
+                (if (nativeProfile == "catalogue") listOf(packRoot.resolve("data/minecraft/recipes/gyrofuge_panel.json")) else emptyList())).sortedBy { it.absolutePath }
             check(packFiles.all(File::isFile)) { "Missing production pack fixture data" }
             // KubeJS data is a real high-priority pack. Merely copying cross-mod
             // recipe JSON into Manufacturing dev-mod resources lets the native IH
@@ -501,7 +552,9 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
             if (nativeProfile != "core") {
                 val families = when (nativeProfile) {
                     "create", "create_bumblezone" -> listOf("wave2CreateFixture")
+                    "create_powergrid" -> listOf("wave2CreateFixture", "wave2PowergridFixture")
                     "fluids" -> listOf("wave2FluidsHeatFixture")
+                    "catalogue" -> listOf("catalogueOptionalFixture")
                     else -> listOf("wave2PneuMechanicsFixture", "wave2PneuProcessFixture")
                 }
                 families.forEach { from("src/$it/resources/data/better_manufacturing/gametest/structures") }
@@ -513,9 +566,9 @@ tasks.matching { it.name == "runGameTestServer" }.configureEach {
         val log = nativeDirectory.get().asFile.resolve("logs/latest.log").readText()
         val complete = Regex("(\\d+) GAME TESTS COMPLETE").findAll(log).map { it.groupValues[1].toInt() }.toList()
         val passed = Regex("All (\\d+) required tests passed").findAll(log).map { it.groupValues[1].toInt() }.toList()
-        check(complete == listOf(nativeTestCount) && passed == listOf(nativeTestCount)) { "Missing/incorrect native test population: complete=$complete passed=$passed" }
+        check(complete == listOf(expectedNativeTestCount) && passed == listOf(expectedNativeTestCount)) { "Missing/incorrect native test population: complete=$complete passed=$passed" }
         check(log.contains("Game test server shutting down")) { "Native test server did not shut down normally" }
-        exec { commandLine("python3", "-B", "scripts/native_receipt.py", projectDir.absolutePath, nativeDirectory.get().asFile.absolutePath, nativeTestCount.toString()) }
+        exec { commandLine("python3", "-B", "scripts/native_receipt.py", projectDir.absolutePath, nativeDirectory.get().asFile.absolutePath, expectedNativeTestCount.toString()) }
     }
 }
 // Non-GameTest launches must never inherit the fluids-only derived AdPother
@@ -543,7 +596,7 @@ tasks.matching { it.name == "runClient" }.configureEach {
         doLast {
             val evidence = clientDirectory.get().asFile.resolve("client-witness.json")
             check(evidence.isFile && evidence.readText().contains("\"status\": \"passed\"")) { "Client fixture failed or produced no witness: $evidence" }
-            listOf("drill-wood.png", "drill-iron.png", "drill-retool.png", "mesh-wood.png", "mesh-iron.png", "mesh-retool.png").forEach { name ->
+            listOf("drill-native-recipe.png", "drill-installed-world.png", "drill-inventory.png", "mesh-native-recipe.png", "mesh-installed-world.png", "mesh-inventory.png").forEach { name ->
                 check(clientDirectory.get().asFile.resolve("screenshots/$name").length() > 5000) { "Missing native screenshot: $name" }
             }
             val clientLog = clientDirectory.get().asFile.resolve("logs/latest.log").readLines()

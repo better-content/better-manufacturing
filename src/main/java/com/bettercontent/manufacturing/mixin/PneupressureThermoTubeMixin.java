@@ -30,8 +30,8 @@ public abstract class PneupressureThermoTubeMixin {
         double envelope = settings.properties().get("pressure_envelope");
         if (!Double.isFinite(envelope) || envelope < .75 || envelope > 1) return result;
         var output = result.copy();
-        SettingsNbt.write(output.getOrCreateTag(), new MachineSettings("pneumaticcraft:reinforced_pressure_tube",
-            Map.of("pressure_envelope", envelope), settings.materials(), null));
+        SettingsNbt.write(output.getOrCreateTag(), SettingsNbt.inherit("pneumaticcraft:reinforced_pressure_tube",
+            "pressure_envelope", settings));
         return output;
     }
 }

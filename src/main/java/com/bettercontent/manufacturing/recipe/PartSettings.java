@@ -3,6 +3,7 @@ package com.bettercontent.manufacturing.recipe;
 import com.bettercontent.manufacturing.api.MachineSettings;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import com.bettercontent.manufacturing.tconstruct.NativePartRates;
+import com.bettercontent.manufacturing.tconstruct.NativePartCapture;
 import com.bettercontent.manufacturing.tconstruct.NativePartRates.Measure;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -17,6 +18,9 @@ import java.util.*;
 public final class PartSettings {
     private PartSettings() {}
     public static MachineSettings bake(String output, String function, Map<String, ItemStack> inputs) {
+        return NativePartCapture.bake(function, inputs, () -> bakeResult(output, function, inputs));
+    }
+    private static MachineSettings bakeResult(String output, String function, Map<String, ItemStack> inputs) {
         // Family recipes share the shaped-result codec; each owner validates its own
         // output, part roles and native property envelope. No runtime material lookup.
         switch (function) {
@@ -79,7 +83,7 @@ public final class PartSettings {
                 if (settings == null && tag != null && tag.contains(SettingsNbt.KEY))
                     throw new IllegalArgumentException("Invalid configured component settings");
                 // A configured whisk/propeller must carry its own native work property;
-                // otherwise a valid v1 envelope for another function could be laundered into a new craft.
+                // otherwise a wrong-family envelope could be laundered into a new craft.
                 if (settings != null && !settings.properties().keySet().equals(Set.of(airflow ? "airflow" : "work_rate")))
                     throw new IllegalArgumentException("Wrong configured component rating");
                 rate = Math.min(rate, settings == null ? 1 : settings.rate());
