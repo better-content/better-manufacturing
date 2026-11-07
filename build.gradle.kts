@@ -312,6 +312,8 @@ dependencies {
         "net.createmod.ponder:Ponder-Forge-1.20.1:1.0.92", "com.tterrag.registrate:Registrate:MC1.20-1.3.3")
     createDependencies.forEach { compileOnly(fg.deobf(it)); if (withCreate) runtimeOnly(fg.deobf(it)) }
     compileOnly(fg.deobf("dev.engine-room.flywheel:flywheel-forge-api-1.20.1:1.0.5"))
+    compileOnly("io.github.llamalad7:mixinextras-common:0.5.4")
+    annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.4")
     compileOnly("io.github.llamalad7:mixinextras-forge:0.5.4")
     if (withCreate) {
         runtimeOnly(fg.deobf("dev.engine-room.flywheel:flywheel-forge-1.20.1:1.0.5"))
