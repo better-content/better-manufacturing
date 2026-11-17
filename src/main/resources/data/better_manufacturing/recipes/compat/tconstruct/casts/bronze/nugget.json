@@ -1,0 +1,14 @@
+{
+  "type": "tconstruct:casting_table",
+  "cast": {
+    "tag": "forge:nuggets"
+  },
+  "cast_consumed": true,
+  "cooling_time": 57,
+  "fluid": {
+    "amount": 90,
+    "tag": "forge:molten_bronze"
+  },
+  "switch_slots": true,
+  "result": "better_manufacturing:bronze_nugget_cast"
+}
