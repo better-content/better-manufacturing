@@ -1,0 +1,32 @@
+{
+  "values": [
+    "better_manufacturing:bronze_ingot_cast",
+    "better_manufacturing:bronze_nugget_cast",
+    "better_manufacturing:bronze_gem_cast",
+    "better_manufacturing:bronze_rod_cast",
+    "better_manufacturing:bronze_repair_kit_cast",
+    "better_manufacturing:bronze_plate_cast",
+    "better_manufacturing:bronze_gear_cast",
+    "better_manufacturing:bronze_coin_cast",
+    "better_manufacturing:bronze_wire_cast",
+    "better_manufacturing:bronze_pick_head_cast",
+    "better_manufacturing:bronze_small_axe_head_cast",
+    "better_manufacturing:bronze_small_blade_cast",
+    "better_manufacturing:bronze_adze_head_cast",
+    "better_manufacturing:bronze_hammer_head_cast",
+    "better_manufacturing:bronze_broad_axe_head_cast",
+    "better_manufacturing:bronze_broad_blade_cast",
+    "better_manufacturing:bronze_large_plate_cast",
+    "better_manufacturing:bronze_tool_binding_cast",
+    "better_manufacturing:bronze_tough_binding_cast",
+    "better_manufacturing:bronze_tool_handle_cast",
+    "better_manufacturing:bronze_tough_handle_cast",
+    "better_manufacturing:bronze_bow_limb_cast",
+    "better_manufacturing:bronze_bow_grip_cast",
+    "better_manufacturing:bronze_helmet_plating_cast",
+    "better_manufacturing:bronze_chestplate_plating_cast",
+    "better_manufacturing:bronze_leggings_plating_cast",
+    "better_manufacturing:bronze_boots_plating_cast",
+    "better_manufacturing:bronze_maille_cast"
+  ]
+}

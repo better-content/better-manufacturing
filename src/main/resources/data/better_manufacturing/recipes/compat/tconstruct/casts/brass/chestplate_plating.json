@@ -1,0 +1,20 @@
+{
+  "type": "tconstruct:casting_table",
+  "cast": [
+    {
+      "type": "tconstruct:material",
+      "item": "tconstruct:chestplate_plating"
+    },
+    {
+      "item": "tconstruct:chestplate_plating_dummy"
+    }
+  ],
+  "cast_consumed": true,
+  "cooling_time": 57,
+  "fluid": {
+    "amount": 90,
+    "tag": "forge:molten_brass"
+  },
+  "switch_slots": true,
+  "result": "better_manufacturing:brass_chestplate_plating_cast"
+}

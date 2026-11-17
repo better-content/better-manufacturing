@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "#better_manufacturing:casts/bronze",
+    "#better_manufacturing:casts/brass"
+  ]
+}
