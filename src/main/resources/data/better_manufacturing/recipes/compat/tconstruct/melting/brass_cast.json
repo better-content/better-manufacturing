@@ -1,0 +1,7 @@
+{
+  "type": "tconstruct:melting",
+  "ingredient": {"tag": "better_manufacturing:casts/brass"},
+  "result": {"amount": 90, "tag": "forge:molten_brass"},
+  "temperature": 605,
+  "time": 54
+}

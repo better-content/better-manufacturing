@@ -1,8 +1,10 @@
 package com.bettercontent.manufacturing.recipe;
 
 import com.bettercontent.manufacturing.api.*;
+import com.mojang.logging.LogUtils;
 import com.bettercontent.manufacturing.persistence.SettingsNbt;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.*;
@@ -12,6 +14,27 @@ import java.util.*;
 
 /** Explicit recipe slots select the parts. Only calculated settings reach the output. */
 public final class PartVariantRecipe extends ShapedRecipe {
+    private static final org.slf4j.Logger LOGGER = LogUtils.getLogger();
+    private static final int MAX_DIAGNOSTIC_RECIPES = 128;
+    private static final Map<ResourceLocation, Set<String>> REJECTED = new LinkedHashMap<>();
+
+    private void reportRejectedSettings(ResourceLocation outputId, Map<String, ItemStack> inputs, IllegalArgumentException cause) {
+        String reason = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+        synchronized (REJECTED) {
+            Set<String> reasons = REJECTED.get(getId());
+            if (reasons == null) {
+                if (REJECTED.size() >= MAX_DIAGNOSTIC_RECIPES) return;
+                reasons = new HashSet<>();
+                REJECTED.put(getId(), reasons);
+            }
+            if (reasons.size() >= 3 || !reasons.add(reason)) return;
+        }
+        var parts = new LinkedHashMap<String, Object>();
+        inputs.forEach((role, stack) -> parts.put(role, ForgeRegistries.ITEMS.getKey(stack.getItem())));
+        LOGGER.warn("Part recipe {} matched ingredients, but settings for {} ({}) were rejected: {}. "
+                + "Check native part shape/material/stats or configured component data; this is not an ingredient mismatch or EMI transfer failure. "
+                + "Part item IDs by role: {}", getId(), outputId, function, reason, parts);
+    }
     public record Part(String role, int slot) {
         public Part { Identifiers.role(role); if (slot < 0 || slot > 8) throw new IllegalArgumentException("Invalid part slot"); }
     }
@@ -99,7 +122,10 @@ public final class PartVariantRecipe extends ShapedRecipe {
                     // newly captured numeric build; all unrelated native NBT stays intact.
                     SettingsNbt.write(output.getOrCreateTag(), PartSettings.bake(id.toString(), function, inputs));
                     return output;
-                } catch (IllegalArgumentException unsupported) { return ItemStack.EMPTY; }
+                } catch (IllegalArgumentException unsupported) {
+                    reportRejectedSettings(id, inputs, unsupported);
+                    return ItemStack.EMPTY;
+                }
             }
         return ItemStack.EMPTY;
     }
