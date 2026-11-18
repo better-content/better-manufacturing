@@ -376,6 +376,13 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 tasks.withType<JavaCompile>().configureEach { options.release.set(17) }
+tasks.named<JavaCompile>("compileJava") {
+    val refmap = layout.buildDirectory.file("tmp/compileJava/compileJava-refmap.json")
+    outputs.file(refmap)
+    // Re-run the Mixin annotation processor when its transient refmap is missing.
+    options.isIncremental = false
+    doLast { check(refmap.get().asFile.isFile) { "Production Mixin refmap was not generated" } }
+}
 tasks.withType<Test>().configureEach { useJUnitPlatform() }
 jacoco { toolVersion = "0.8.12" }
 tasks.jacocoTestReport {
