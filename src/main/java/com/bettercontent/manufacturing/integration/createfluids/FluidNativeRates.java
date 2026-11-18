@@ -3,25 +3,13 @@ package com.bettercontent.manufacturing.integration.createfluids;
 import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 import com.simibubi.create.content.contraptions.actors.psi.PortableFluidInterfaceBlockEntity;
 import net.minecraftforge.fluids.FluidStack;
-import java.lang.reflect.Field;
 
 /** Native capacity/transfer helpers; never alter recipes, fluid types or output quantities. */
 public final class FluidNativeRates {
-    private static final Field PORTABLE_OWNER = findPortableOwner();
     private FluidNativeRates() {}
-    private static Field findPortableOwner() {
-        try {
-            var field = PortableFluidInterfaceBlockEntity.InterfaceFluidHandler.class.getDeclaredField("this$0");
-            return field.trySetAccessible() ? field : null;
-        } catch (ReflectiveOperationException | SecurityException unavailable) {
-            return null; // Unknown Create implementation retains its native capability unchanged.
-        }
-    }
     private static Object owner(Object handler) {
         if (handler instanceof PortableFluidInterfaceBlockEntity) return handler;
-        if (PORTABLE_OWNER == null || !(handler instanceof PortableFluidInterfaceBlockEntity.InterfaceFluidHandler)) return null;
-        try { return PORTABLE_OWNER.get(handler); }
-        catch (ReflectiveOperationException | SecurityException unavailable) { return null; }
+        return handler instanceof PortableFluidOwner owned ? owned.manufacturing$owner() : null;
     }
     public static double rate(Object block, String property) {
         var variant = FluidVariantBehaviour.get(block);

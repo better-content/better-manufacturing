@@ -60,7 +60,8 @@ class CatalogueSourceContractsTest {
     }
 
     @Test void oc2rMachineCraftsKeepTheirNativeCostsAndNoManufacturingFallback() throws IOException {
-        // These nine were full 3x3 grids: a physical part must not replace native material.
+        // The paid branch adds one row for physical parts without replacing native material;
+        // network_connector's original grid is 2x3, while the other eight are 3x3.
         for (String name : List.of("charger", "computer", "disk_drive", "flash_memory_flasher",
                 "keyboard", "network_connector", "network_hub", "redstone_interface", "projector")) {
             JsonObject root = recipe("oc2r/recipes/" + name);
@@ -68,7 +69,8 @@ class CatalogueSourceContractsTest {
             JsonObject fallback = branch(root, false);
             assertEquals("create:mechanical_crafting", paid.get("type").getAsString(), name);
             assertEquals("minecraft:crafting_shaped", fallback.get("type").getAsString(), name);
-            assertEquals(4, paid.getAsJsonArray("pattern").size(), name);
+            assertEquals(name.equals("network_connector") ? 3 : 4,
+                paid.getAsJsonArray("pattern").size(), name);
             assertEquals(1, countItem(paid, "tconstruct:tool_handle"), name);
             assertEquals(1, countItem(paid, "tconstruct:large_plate"), name);
             if (name.equals("charger"))

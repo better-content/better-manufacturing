@@ -40,6 +40,7 @@ public final class CreateDrillTests {
     static ItemStack craft(GameTestHelper helper, String material) {
         var recipe = (PartVariantRecipe) helper.getLevel().getRecipeManager().byKey(new ResourceLocation("create:crafting/kinetics/mechanical_drill")).orElseThrow();
         var grid = grid();
+        grid.setItem(0, new ItemStack(Items.IRON_INGOT)); // Paid branch retains the native iron cost.
         for (int slot : new int[]{1,3,5}) grid.setItem(slot, AllItems.ANDESITE_ALLOY.asStack());
         grid.setItem(7, AllBlocks.ANDESITE_CASING.asStack()); grid.setItem(4, head(material));
         var result = recipe.assemble(grid, helper.getLevel().registryAccess());
@@ -97,6 +98,7 @@ public final class CreateDrillTests {
         var player = net.minecraftforge.common.util.FakePlayerFactory.get(helper.getLevel(), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "variant_craft"));
         var pos = helper.absolutePos(new BlockPos(3,1,3)); helper.getLevel().setBlockAndUpdate(pos, Blocks.CRAFTING_TABLE.defaultBlockState());
         var menu = new CraftingMenu(1, player.getInventory(), ContainerLevelAccess.create(helper.getLevel(),pos));
+        menu.getSlot(1).set(new ItemStack(Items.IRON_INGOT));
         for(int slot:new int[]{1,3,5}) menu.getSlot(slot+1).set(AllItems.ANDESITE_ALLOY.asStack());
         menu.getSlot(8).set(AllBlocks.ANDESITE_CASING.asStack());
         var part = head("tconstruct:iron"); part.setCount(2); part.getOrCreateTag().putInt("BetterContentJackhammerWear",7);
@@ -104,7 +106,8 @@ public final class CreateDrillTests {
         var preview = menu.getSlot(0).getItem().copy(); var result = menu.getSlot(0).remove(1);
         helper.assertTrue(!result.isEmpty() && ItemStack.isSameItemSameTags(preview,result), "Preview differs from craft");
         menu.getSlot(0).onTake(player,result);
-        helper.assertTrue(menu.getSlot(5).getItem().getCount()==1 && menu.getSlot(8).getItem().isEmpty(), "Craft consumed wrong quantities");
+        helper.assertTrue(menu.getSlot(5).getItem().getCount()==1 && menu.getSlot(8).getItem().isEmpty()
+            && menu.getSlot(1).getItem().isEmpty(), "Craft consumed wrong quantities");
         helper.assertTrue(result.getTag().getAllKeys().equals(java.util.Set.of(SettingsNbt.KEY)) && !result.getTag().toString().contains("Wear"), "Craft retained original part state");
         helper.assertTrue(helper.getLevel().getRecipeManager().byKey(new ResourceLocation("better_manufacturing:retool_drill_head")).isEmpty(), "Retooling recipe remains active");
         helper.succeed();

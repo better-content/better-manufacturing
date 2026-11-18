@@ -5,7 +5,10 @@ import com.bettercontent.manufacturing.integration.createfluids.FluidVariantBeha
 import com.bettercontent.manufacturing.integration.createfluids.FluidNativeRates;
 import com.simibubi.create.content.contraptions.actors.psi.PortableFluidInterfaceBlockEntity;
 import net.minecraftforge.fluids.capability.templates.FluidTank;
-import com.bettercontent.manufacturing.recipe.PartVariantRecipe;
+import com.bettercontent.manufacturing.integration.createbulk.MechanicalPartVariantRecipe;
+import com.simibubi.create.AllRecipeTypes;
+import com.simibubi.create.content.kinetics.crafter.MechanicalCraftingInventory;
+import com.simibubi.create.content.kinetics.crafter.RecipeGridHandler;
 import com.bettercontent.betterindustrialheat.content.heat.HeatPipeBlockEntity;
 import com.bettercontent.betterindustrialheat.HeatSyncConfig;
 import com.simibubi.create.AllBlocks;
@@ -26,6 +29,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.InteractionHand;
@@ -35,9 +39,6 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.inventory.ResultContainer;
-import net.minecraft.world.inventory.ResultSlot;
-import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.context.DirectionalPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraftforge.fml.ModList;
@@ -316,42 +317,56 @@ public final class Wave2FluidsHeatPipeTests {
             "Industrial Heat and TCon are mandatory in the fluids profile");
         var found = helper.getLevel().getRecipeManager()
             .byKey(new ResourceLocation("better_industrial_heat:heat_pipe")).orElseThrow();
-        helper.assertTrue(found instanceof PartVariantRecipe,
-            "Effective heat-pipe recipe must be the real pack PartVariantRecipe, not the IH native ShapedRecipe: "
+        helper.assertTrue(found instanceof MechanicalPartVariantRecipe,
+            "Effective heat-pipe recipe must be the cost-preserving pack mechanical craft: "
                 + found.getClass().getName());
-        var recipe = (PartVariantRecipe) found;
-        var grid = CreateDrillTests.grid();
+        var recipe = (MechanicalPartVariantRecipe) found;
+        // Create only accepts its own mechanical inventory. Build its grouped grid
+        // through the native serialized input format (y coordinates run bottom-up).
+        var groupedTag = new CompoundTag();
+        var entries = new ListTag();
         for (int slot = 0; slot < recipe.getIngredients().size(); slot++) {
-            var options = recipe.getIngredients().get(slot).getItems();
-            helper.assertTrue(options.length > 0, "Missing native pack ingredient at slot " + slot);
-            grid.setItem(slot, options[0].copy());
+            var ingredient = recipe.getIngredients().get(slot);
+            var options = ingredient.getItems();
+            helper.assertTrue(ingredient.isEmpty() || options.length > 0,
+                "Missing native pack ingredient at slot " + slot);
+            var input = ingredient.isEmpty() ? ItemStack.EMPTY : options[0].copy();
+            if (slot == 9) {
+                helper.assertTrue(input.getItem() instanceof ToolPartItem,
+                    "Thermal surface must consume a fourth-row large plate");
+                input = ((ToolPartItem) input.getItem()).withMaterial(MaterialVariantId.parse("tconstruct:rock#stone"));
+            }
+            var entry = new CompoundTag();
+            entry.putInt("x", slot % recipe.getWidth());
+            entry.putInt("y", recipe.getHeight() - 1 - slot / recipe.getWidth());
+            entry.put("item", input.serializeNBT());
+            entries.add(entry);
         }
-        for (var binding : recipe.parts()) {
-            helper.assertTrue(binding.role().equals("thermal_surface"), "Unexpected heat pipe part role");
-            int slot = binding.slot();
-            helper.assertTrue(grid.getItem(slot).getItem() instanceof ToolPartItem, "Thermal surface must consume large plate");
-            var plate = (ToolPartItem) grid.getItem(slot).getItem();
-            grid.setItem(slot, plate.withMaterial(MaterialVariantId.parse("tconstruct:rock#stone")));
-        }
+        groupedTag.put("Grid", entries);
+        var grouped = RecipeGridHandler.GroupedItems.read(groupedTag);
+        grouped.calcStats();
+        var grid = new MechanicalCraftingInventory(grouped);
+        helper.assertTrue(recipe.getWidth() == 3 && recipe.getHeight() == 4
+            && grid.getItem(9).getItem() instanceof ToolPartItem,
+            "Pack heat-pipe craft must retain 3x3 native costs plus the fourth-row plate");
         helper.assertTrue(recipe.matches(grid, helper.getLevel()),
-            "Active heat-pipe PartVariantRecipe rejected real plate and native ingredients");
-        var selected = helper.getLevel().getRecipeManager()
-            .getRecipeFor(RecipeType.CRAFTING, grid, helper.getLevel()).orElseThrow();
-        helper.assertTrue(selected.getId().equals(recipe.getId()) && selected instanceof PartVariantRecipe,
-            "Ordinary crafting selected a different heat-pipe recipe: " + selected.getId());
-        ItemStack crafted = recipe.assemble(grid, helper.getLevel().registryAccess());
+            "Active mechanical heat-pipe recipe rejected real plate and native ingredients");
+        var selected = AllRecipeTypes.MECHANICAL_CRAFTING.find(grid, helper.getLevel()).orElseThrow();
+        helper.assertTrue(selected.getId().equals(recipe.getId()),
+            "Create mechanical crafting selected a different heat-pipe recipe: " + selected.getId());
+        ItemStack crafted = selected.assemble(grid, helper.getLevel().registryAccess());
         helper.assertTrue(!crafted.isEmpty() && crafted.getCount() == 4 &&
             ForgeRegistries.ITEMS.getKey(crafted.getItem()).toString().equals("better_industrial_heat:heat_pipe"),
             "Effective heat pipe recipe must consume a real cheap plate and yield four pipes");
-        // Use Forge/vanilla's actual result-slot take path, which decrements each
-        // ingredient after the active recipe supplies its container remainders.
-        var player = FakePlayerFactory.getMinecraft(helper.getLevel());
-        var result = new ResultContainer();
-        result.setRecipeUsed(recipe);
-        new ResultSlot(player, grid, result, 0, 0, 0).onTake(player, crafted.copy());
+        // Every native 3x3 ingredient and the added plate must be indispensable to
+        // Create's selected craft; the vanilla ResultSlot is not a mechanical-crafter path.
         for (int slot = 0; slot < recipe.getIngredients().size(); slot++) {
-            if (!recipe.getIngredients().get(slot).isEmpty())
-                helper.assertTrue(grid.getItem(slot).isEmpty(), "Ordinary craft returned consumed heat-pipe input " + slot);
+            if (recipe.getIngredients().get(slot).isEmpty()) continue;
+            var input = grid.getItem(slot).copy();
+            grid.setItem(slot, ItemStack.EMPTY);
+            helper.assertTrue(!recipe.matches(grid, helper.getLevel()),
+                "Mechanical craft did not require heat-pipe input " + slot);
+            grid.setItem(slot, input);
         }
         BlockPos pos = new BlockPos(1, 1, 1);
         var placed = ((BlockItem) crafted.getItem()).place(new DirectionalPlaceContext(

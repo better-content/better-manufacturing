@@ -138,7 +138,10 @@ listOf(industrialHeatRuntime, hazardsRuntime, airtightRuntime).forEach { owner -
 }
 val compileIndustrialHeatOwner by tasks.registering(Exec::class) {
     workingDir(file("../better-industrial-heat"))
-    commandLine("./gradlew", "--offline", "--no-daemon", "--max-workers=2", "compileKotlin", "compileJava", "processResources")
+    commandLine("./gradlew", "--offline", "--no-daemon", "--max-workers=2",
+        "-PtypedWaterCompileClasses=${file("../better-drinking-water/build/classes/java/main").absolutePath}",
+        "-PtypedSpiceCompileClasses=${file("../better-spicy-farmers/build/classes/java/main").absolutePath}",
+        "compileKotlin", "compileJava", "processResources")
 }
 val compileRailBeetleOwner by tasks.registering(Exec::class) {
     workingDir(file("../better-rail-beetle"))

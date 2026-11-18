@@ -1,6 +1,7 @@
 package com.bettercontent.manufacturing.mixin.createfluids;
 
 import com.bettercontent.manufacturing.integration.createfluids.FluidNativeRates;
+import com.bettercontent.manufacturing.integration.createfluids.PortableFluidOwner;
 import com.simibubi.create.content.contraptions.actors.psi.PortableFluidInterfaceBlockEntity;
 import com.simibubi.create.content.fluids.drain.ItemDrainBlockEntity;
 import com.simibubi.create.content.fluids.hosePulley.HosePulleyBlockEntity;
@@ -11,11 +12,13 @@ import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.capability.IFluidHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Hooks native transfer time and pressure usage; recipes, quantities, endpoints and geometry remain native. */
@@ -61,7 +64,21 @@ public final class FluidTransferMixins {
         }
     }
     @Mixin(value = PortableFluidInterfaceBlockEntity.InterfaceFluidHandler.class, remap = false)
-    public abstract static class Portable {
+    public abstract static class Portable implements PortableFluidOwner {
+        @Unique private PortableFluidInterfaceBlockEntity manufacturing$outerOwner;
+
+        @Inject(method = "<init>(Lcom/simibubi/create/content/contraptions/actors/psi/PortableFluidInterfaceBlockEntity;Lnet/minecraftforge/fluids/capability/IFluidHandler;)V",
+                at = @At("RETURN"))
+        private void manufacturing$captureOwner(PortableFluidInterfaceBlockEntity owner, IFluidHandler wrapped,
+                                                 CallbackInfo ci) {
+            manufacturing$outerOwner = owner;
+        }
+
+        @Override
+        public PortableFluidInterfaceBlockEntity manufacturing$owner() {
+            return manufacturing$outerOwner;
+        }
+
         // Native requests stay authoritative. Both directions draw from one per-block tick budget;
         // SIMULATE observes the same remaining amount but only a successful EXECUTE spends it.
         @ModifyArg(method = "fill", at = @At(value = "INVOKE", target =
