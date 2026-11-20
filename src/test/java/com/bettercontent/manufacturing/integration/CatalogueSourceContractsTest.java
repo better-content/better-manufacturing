@@ -1,6 +1,5 @@
 package com.bettercontent.manufacturing.integration;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,7 +9,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -83,30 +81,47 @@ class CatalogueSourceContractsTest {
         }
     }
 
-    @Test void earlySophisticatedBundlesKeepTheNativeCraftingStationAndPayDisplacedCosts() throws IOException {
+    @Test void earlySophisticatedCraftsKeepTheirNativeStationAndShowTheWorkingPlate() throws IOException {
         for (String[] route : new String[][] {
-                {"sophisticatedstorage", "upgrade_base", "upgrade_base_sophisticatedstorage"},
-                {"sophisticatedbackpacks", "upgrade_base", "upgrade_base_sophisticatedbackpacks"},
-                {"sophisticatedstorage", "controller", "controller_sophisticatedstorage"},
-                {"sophisticatedstorage", "storage_io", "storage_io_sophisticatedstorage"}}) {
+                {"sophisticatedstorage", "upgrade_base"},
+                {"sophisticatedbackpacks", "upgrade_base"},
+                {"sophisticatedstorage", "controller"},
+                {"sophisticatedstorage", "storage_io"}}) {
             String output = route[0] + ":" + route[1];
-            JsonObject finalRecipe = branch(recipe(route[0] + "/recipes/" + route[1]), true);
-            JsonObject prep = branch(recipe("better_manufacturing/recipes/sophisticated_cost_bundle/" + route[2]), true);
+            JsonObject root = recipe(route[0] + "/recipes/" + route[1]);
+            JsonObject finalRecipe = branch(root, true);
+            JsonObject fallback = branch(root, false);
             assertEquals("minecraft:crafting_shaped", finalRecipe.get("type").getAsString(), output);
-            assertEquals("better_manufacturing:sophisticated_cost_bundle", prep.get("type").getAsString(), output);
-            assertEquals(output, prep.get("marker").getAsString(), output);
-            JsonArray costs = prep.getAsJsonArray("costs");
-            assertEquals(3, costs.size(), "Missing displaced native material or one of two parts: " + output);
-            Set<String> items = Set.of(costs.get(1).getAsJsonObject().get("item").getAsString(),
-                costs.get(2).getAsJsonObject().get("item").getAsString());
-            assertEquals(Set.of("tconstruct:tool_handle", "tconstruct:large_plate"), items, output);
-            boolean marked = false;
+            assertEquals(3, finalRecipe.getAsJsonArray("pattern").size(), output);
+            assertEquals(1, countItem(finalRecipe, "tconstruct:large_plate"), output);
+            assertEquals(1, countItem(fallback, "tconstruct:large_plate"),
+                "The native fallback already consumes this plate: " + output);
+            assertEquals(finalRecipe.get("result"), fallback.get("result"), output);
             for (var entry : finalRecipe.getAsJsonObject("key").entrySet()) {
                 JsonObject ingredient = entry.getValue().getAsJsonObject();
-                if (ingredient.has("type") && "better_manufacturing:sophisticated_cost_bundle".equals(ingredient.get("type").getAsString())
-                    && output.equals(ingredient.get("marker").getAsString())) marked = true;
+                assertNotEquals("better_manufacturing:sophisticated_cost_bundle",
+                    ingredient.has("type") ? ingredient.get("type").getAsString() : "", output);
             }
-            assertTrue(marked, "Final craft does not consume its exact paid bundle: " + output);
+        }
+    }
+
+    @Test void meshesAndBeesConsumeVisibleMaterialsBesideTheirWorkingParts() throws IOException {
+        for (String mesh : List.of("string", "andesite", "zinc", "brass")) {
+            JsonObject recipe = branch(recipe("createsifter/recipes/" + mesh + "_mesh"), true);
+            assertEquals("better_manufacturing:part_variant", recipe.get("type").getAsString(), mesh);
+            assertEquals(4, countItem(recipe, "tconstruct:tool_handle"), mesh);
+            assertEquals(4, countItem(recipe, "minecraft:stick"), mesh);
+            assertFalse(recipe.getAsJsonObject("key").getAsJsonObject("M").has("type"), mesh);
+        }
+        for (String name : List.of("frame", "autolyzer", "gyrofuge_speed_unit", "wet_frame")) {
+            JsonObject recipe = branch(recipe("complicated_bees/recipes/" + name), true);
+            assertEquals(3, recipe.getAsJsonArray("pattern").size(), name);
+            assertTrue(countItem(recipe, "tconstruct:large_plate") > 0, name);
+            for (var entry : recipe.getAsJsonObject("key").entrySet()) {
+                JsonObject ingredient = entry.getValue().getAsJsonObject();
+                assertNotEquals("forge:partial_nbt",
+                    ingredient.has("type") ? ingredient.get("type").getAsString() : "", name);
+            }
         }
     }
 
