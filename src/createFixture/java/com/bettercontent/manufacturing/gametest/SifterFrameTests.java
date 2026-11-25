@@ -25,12 +25,17 @@ public final class SifterFrameTests {
     static ItemStack mesh(GameTestHelper helper,String kind,String material) {
         var recipe=(PartVariantRecipe)helper.getLevel().getRecipeManager().byKey(new ResourceLocation("createsifter:"+kind+"_mesh")).orElseThrow();
         var grid=CreateDrillTests.grid(); for(int slot:new int[]{1,3,5,7}) grid.setItem(slot,handle(material));
-        // The production KubeJS prep consumes the native center material and yields a
-        // marked stick; this isolated owner fixture starts from that paid intermediate.
-        var paid=new ItemStack(Items.STICK);
-        paid.getOrCreateTagElement("better_manufacturing").putInt(kind+"_mesh_paid",1);
-        helper.assertTrue(recipe.getIngredients().get(4).test(paid),"Paid mesh center disagrees with production recipe");
-        grid.setItem(4,paid);
+        // Craft the loaded pack recipe with real corners and center material.
+        for (int slot : new int[]{0,2,6,8}) grid.setItem(slot, new ItemStack(Items.STICK));
+        String center = switch (kind) {
+            case "string" -> "minecraft:string";
+            case "andesite" -> "create:andesite_alloy";
+            case "zinc", "brass" -> "create:" + kind + "_ingot";
+            default -> throw new IllegalArgumentException("Unknown mesh kind " + kind);
+        };
+        var centerStack = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation(center)));
+        helper.assertTrue(recipe.getIngredients().get(4).test(centerStack), "Mesh center disagrees with production recipe: " + center);
+        grid.setItem(4, centerStack);
         var result=recipe.assemble(grid,helper.getLevel().registryAccess()); helper.assertTrue(!result.isEmpty(),"Mesh craft failed"); return result;
     }
     static SifterBlockEntity machine(GameTestHelper helper,int x,ItemStack mesh,boolean wet) {
